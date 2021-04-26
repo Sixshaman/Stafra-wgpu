@@ -7,6 +7,7 @@ use winit::
     platform::web::WindowBuilderExtWebSys
 };
 
+use std::borrow::Cow;
 use web_sys::console;
 use futures::executor::block_on;
 use wasm_bindgen::JsCast;
@@ -21,6 +22,8 @@ struct State
     sc_desc:    wgpu::SwapChainDescriptor,
     swap_chain: wgpu::SwapChain,
     size:       winit::dpi::PhysicalSize<u32>,
+
+    pipeline: wgpu::RenderPipeline
 }
 
 impl State 
@@ -46,10 +49,11 @@ impl State
         },
         None).await.unwrap();
 
+        let swapchain_format = adapter.get_swap_chain_preferred_format(&surface).unwrap();
         let sc_desc = wgpu::SwapChainDescriptor 
         {
             usage:        wgpu::TextureUsage::RENDER_ATTACHMENT,
-            format:       adapter.get_swap_chain_preferred_format(&surface).unwrap(),
+            format:       swapchain_format,
             width:        size.width,
             height:       size.height,
             present_mode: wgpu::PresentMode::Fifo,
@@ -57,7 +61,57 @@ impl State
 
         let swap_chain = device.create_swap_chain(&surface, &sc_desc);
 
-        Self 
+        let main_vs_module = device.create_shader_module(&wgpu::include_spirv!("../static/main_vs.spv"));
+        let main_fs_module = device.create_shader_module(&wgpu::include_spirv!("../static/main_fs.spv"));
+
+        let main_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor 
+        {
+            label: None,
+            bind_group_layouts: &[],
+            push_constant_ranges: &[],
+        });
+
+        let main_render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor 
+        {
+            label: None,
+            layout: Some(&main_pipeline_layout),
+            
+            vertex: wgpu::VertexState 
+            {
+                module: &main_vs_module,
+                entry_point: "main",
+                buffers: &[],
+            },
+
+            fragment: Some(wgpu::FragmentState 
+            {
+                module: &main_fs_module,
+                entry_point: "main",
+                targets: &[wgpu::ColorTargetState 
+                {
+                    format:     swapchain_format,
+                    blend:      None,
+                    write_mask: wgpu::ColorWrite::ALL,
+                }],
+            }),
+
+            depth_stencil: None,
+
+            primitive: wgpu::PrimitiveState
+            {
+                topology:           wgpu::PrimitiveTopology::TriangleList,
+                strip_index_format: None,
+                front_face:         wgpu::FrontFace::Cw,
+                cull_mode:          None,
+                clamp_depth:        false,
+                polygon_mode:       wgpu::PolygonMode::Fill,
+                conservative:       false
+            },      
+      
+            multisample: wgpu::MultisampleState::default(),
+        });
+
+        Self
         {
             surface,
             device,
@@ -65,6 +119,7 @@ impl State
             sc_desc,
             swap_chain,
             size,
+            pipeline: main_render_pipeline
         }
     }
 
@@ -90,15 +145,11 @@ impl State
     {
         let frame = self.swap_chain.get_current_frame()?.output;
 
-        let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor 
+        let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor{label: None});
         {
-            label: Some("MainStafraCmdEncoder"),
-        });
-    
-        {
-            let _render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor 
+            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor 
             {
-                label: Some("Render Pass"),
+                label: None,
                 color_attachments: 
                 &[
                     wgpu::RenderPassColorAttachment
@@ -107,23 +158,17 @@ impl State
                         resolve_target: None,
                         ops: wgpu::Operations 
                         {
-                            load: wgpu::LoadOp::Clear
-                            (
-                                wgpu::Color 
-                                {
-                                    r: 0.1,
-                                    g: 0.2,
-                                    b: 0.3,
-                                    a: 1.0,
-                                }
-                            ),
+                            load: wgpu::LoadOp::Clear(wgpu::Color::GREEN),
                             store: true,
-                        }
+                        },
                     }
                 ],
 
                 depth_stencil_attachment: None,
             });
+
+            render_pass.set_pipeline(&self.pipeline);
+            render_pass.draw(0..3, 0..1);
         }
     
         self.queue.submit(std::iter::once(encoder.finish()));
