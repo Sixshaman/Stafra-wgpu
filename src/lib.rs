@@ -1,6 +1,6 @@
 use winit::
 {
-    event::{Event, WindowEvent, KeyboardInput},
+    event::{Event, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
     window::{WindowBuilder, Window},
     platform::web::WindowExtWebSys,
@@ -9,12 +9,11 @@ use winit::
 
 use std::borrow::Cow;
 use web_sys::console;
-use futures::executor::block_on;
 use wasm_bindgen::JsCast;
 use wasm_bindgen_futures::spawn_local;
 use wasm_bindgen::prelude::*;
 
-struct State 
+struct StafraState 
 {
     surface:    wgpu::Surface,
     device:     wgpu::Device,
@@ -23,16 +22,19 @@ struct State
     swap_chain: wgpu::SwapChain,
     size:       winit::dpi::PhysicalSize<u32>,
 
-    pipeline: wgpu::RenderPipeline
+    render_state_pipeline:            wgpu::RenderPipeline,
+    clear_4_corners_pipeline:         wgpu::ComputePipeline,
+    initial_state_transform_pipeline: wgpu::ComputePipeline,
+    final_state_transform_pipeline:   wgpu::ComputePipeline,
 }
 
-impl State 
+impl StafraState 
 {
     async fn new(window: &Window) -> Self 
     {
         let size = window.inner_size();
 
-        let wgpu_instance = wgpu::Instance::new(wgpu::BackendBit::all());
+        let wgpu_instance = wgpu::Instance::new(wgpu::BackendBit::PRIMARY);
         let surface = unsafe{ wgpu_instance.create_surface(window) };
 
         let adapter = wgpu_instance.request_adapter(&wgpu::RequestAdapterOptions 
@@ -43,8 +45,8 @@ impl State
 
         let (device, queue) = adapter.request_device(&wgpu::DeviceDescriptor 
         {
-            features: wgpu::Features::empty(),
-            limits: wgpu::Limits::default(),
+            features: wgpu::Features::default(),
+            limits: wgpu::Limits::default(), 
             label: None,
         },
         None).await.unwrap();
@@ -61,38 +63,209 @@ impl State
 
         let swap_chain = device.create_swap_chain(&surface, &sc_desc);
 
-        let main_vs_module = device.create_shader_module(&wgpu::include_spirv!("../static/main_vs.spv"));
-        let main_fs_module = device.create_shader_module(&wgpu::include_spirv!("../static/main_fs.spv"));
+        let render_state_vs_module = device.create_shader_module(&wgpu::include_spirv!("../static/render_state_vs.spv"));
+        let render_state_fs_module = device.create_shader_module(&wgpu::include_spirv!("../static/render_state_fs.spv"));
 
-        let main_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor 
+        let clear_4_corners_module = device.create_shader_module(&wgpu::include_spirv!("../static/clear_4_corners.spv"));
+
+        let initial_state_transform_module = device.create_shader_module(&wgpu::include_spirv!("../static/initial_state_transform.spv"));
+        let final_state_transform_module   = device.create_shader_module(&wgpu::include_spirv!("../static/final_state_transform.spv"));
+
+        let render_state_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor 
         {
             label: None,
-            bind_group_layouts: &[],
+            bind_group_layouts: 
+            &[
+                &device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor
+                {
+                    label: None,
+                    entries: 
+                    &[
+                        wgpu::BindGroupLayoutEntry
+                        {
+                            binding: 0,
+                            visibility: wgpu::ShaderStage::FRAGMENT,
+                            ty:         wgpu::BindingType::Texture
+                            {
+                                sample_type:    wgpu::TextureSampleType::Float {filterable: true},
+                                view_dimension: wgpu::TextureViewDimension::D2,
+                                multisampled:   false,
+                            },
+                            count: None
+                        },
+        
+                        wgpu::BindGroupLayoutEntry
+                        {
+                            binding:    1,
+                            visibility: wgpu::ShaderStage::FRAGMENT,
+                            ty:         wgpu::BindingType::Sampler
+                            {
+                                filtering:  true,
+                                comparison: false,
+                            },
+                            count: None
+                        },
+                    ]
+                })
+            ],
             push_constant_ranges: &[],
         });
 
-        let main_render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor 
+        let clear_4_corners_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor 
         {
             label: None,
-            layout: Some(&main_pipeline_layout),
+            bind_group_layouts: 
+            &[
+                &device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor
+                {
+                    label: None,
+                    entries: 
+                    &[
+                        wgpu::BindGroupLayoutEntry
+                        {
+                            binding:    0,
+                            visibility: wgpu::ShaderStage::COMPUTE,
+                            ty:         wgpu::BindingType::Buffer
+                            {
+                                ty: wgpu::BufferBindingType::Uniform,
+                                has_dynamic_offset: false,
+                                min_binding_size: core::num::NonZeroU64::new(8)
+                            },
+                            count: None
+                        },
+
+                        wgpu::BindGroupLayoutEntry
+                        {
+                            binding: 1,
+                            visibility: wgpu::ShaderStage::COMPUTE,
+                            ty:         wgpu::BindingType::StorageTexture
+                            {
+                                access:         wgpu::StorageTextureAccess::WriteOnly,
+                                format:         wgpu::TextureFormat::R8Uint,
+                                view_dimension: wgpu::TextureViewDimension::D2,
+                            },
+                            count: None
+                        }
+                    ]
+                })
+            ],
+            push_constant_ranges: 
+            &[
+                wgpu::PushConstantRange
+                {
+                    stages: wgpu::ShaderStage::COMPUTE,
+                    range:  0..8
+                }
+            ],
+        });
+
+        let initial_state_transform_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor 
+        {
+            label: None,
+            bind_group_layouts: 
+            &[
+                &device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor
+                {
+                    label: None,
+                    entries: 
+                    &[
+                        wgpu::BindGroupLayoutEntry
+                        {
+                            binding: 0,
+                            visibility: wgpu::ShaderStage::COMPUTE,
+                            ty:         wgpu::BindingType::Texture
+                            {
+                                sample_type:    wgpu::TextureSampleType::Float {filterable: false},
+                                view_dimension: wgpu::TextureViewDimension::D2,
+                                multisampled:   false,
+                            },
+                            count: None
+                        },
+
+                        wgpu::BindGroupLayoutEntry
+                        {
+                            binding: 1,
+                            visibility: wgpu::ShaderStage::COMPUTE,
+                            ty:         wgpu::BindingType::StorageTexture
+                            {
+                                access:         wgpu::StorageTextureAccess::WriteOnly,
+                                format:         wgpu::TextureFormat::R8Uint,
+                                view_dimension: wgpu::TextureViewDimension::D2,
+                            },
+                            count: None
+                        }
+                    ]
+                })
+            ],
+            push_constant_ranges: &[],
+        });
+
+        let final_state_transform_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor 
+        {
+            label: None,
+            bind_group_layouts: 
+            &[
+                &device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor
+                {
+                    label: None,
+                    entries: 
+                    &[
+                        wgpu::BindGroupLayoutEntry
+                        {
+                            binding: 0,
+                            visibility: wgpu::ShaderStage::COMPUTE,
+                            ty:         wgpu::BindingType::Texture
+                            {
+                                sample_type:    wgpu::TextureSampleType::Uint,
+                                view_dimension: wgpu::TextureViewDimension::D2,
+                                multisampled:   false,
+                            },
+                            count: None
+                        },
+
+                        wgpu::BindGroupLayoutEntry
+                        {
+                            binding: 1,
+                            visibility: wgpu::ShaderStage::COMPUTE,
+                            ty:         wgpu::BindingType::StorageTexture
+                            {
+                                access:         wgpu::StorageTextureAccess::WriteOnly,
+                                format:         wgpu::TextureFormat::R32Float,
+                                view_dimension: wgpu::TextureViewDimension::D2,
+                            },
+                            count: None
+                        }
+                    ]
+                })
+            ],
+            push_constant_ranges: &[],
+        });
+
+        let render_state_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor 
+        {
+            label: None,
+            layout: Some(&render_state_pipeline_layout),
             
             vertex: wgpu::VertexState 
             {
-                module: &main_vs_module,
+                module: &render_state_vs_module,
                 entry_point: "main",
                 buffers: &[],
             },
 
             fragment: Some(wgpu::FragmentState 
             {
-                module: &main_fs_module,
+                module: &render_state_fs_module,
                 entry_point: "main",
-                targets: &[wgpu::ColorTargetState 
-                {
-                    format:     swapchain_format,
-                    blend:      None,
-                    write_mask: wgpu::ColorWrite::ALL,
-                }],
+                targets: 
+                &[
+                    wgpu::ColorTargetState 
+                    {
+                        format:     swapchain_format,
+                        blend:      None,
+                        write_mask: wgpu::ColorWrite::ALL,
+                    }
+                ],
             }),
 
             depth_stencil: None,
@@ -111,6 +284,30 @@ impl State
             multisample: wgpu::MultisampleState::default(),
         });
 
+        let clear_4_corners_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor 
+        {
+            label:       None,
+            layout:      Some(&clear_4_corners_pipeline_layout),
+            module:      &clear_4_corners_module,
+            entry_point: "main"
+        });
+
+        let initial_state_transform_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor 
+        {
+            label:       None,
+            layout:      Some(&initial_state_transform_pipeline_layout),
+            module:      &initial_state_transform_module,
+            entry_point: "main"
+        });
+
+        let final_state_transform_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor 
+        {
+            label:       None,
+            layout:      Some(&final_state_transform_pipeline_layout),
+            module:      &final_state_transform_module,
+            entry_point: "main"
+        });
+
         Self
         {
             surface,
@@ -119,7 +316,11 @@ impl State
             sc_desc,
             swap_chain,
             size,
-            pipeline: main_render_pipeline
+
+            render_state_pipeline,
+            clear_4_corners_pipeline,
+            initial_state_transform_pipeline,
+            final_state_transform_pipeline
         }
     }
 
@@ -129,11 +330,6 @@ impl State
         self.sc_desc.width  = new_size.width;
         self.sc_desc.height = new_size.height;
         self.swap_chain     = self.device.create_swap_chain(&self.surface, &self.sc_desc);
-    }
-
-    fn input(&mut self, event: &WindowEvent) -> bool 
-    {
-        todo!()
     }
 
     fn update(&mut self) 
@@ -167,7 +363,7 @@ impl State
                 depth_stencil_attachment: None,
             });
 
-            render_pass.set_pipeline(&self.pipeline);
+            render_pass.set_pipeline(&self.render_state_pipeline);
             render_pass.draw(0..3, 0..1);
         }
     
@@ -179,7 +375,7 @@ impl State
 
 async fn run(event_loop: EventLoop<()>, canvas_window: Window)
 {
-    let mut state = State::new(&canvas_window).await; 
+    let mut state = StafraState::new(&canvas_window).await; 
 
     event_loop.run(move |event, _, control_flow| match event
     {
@@ -251,7 +447,7 @@ pub fn entry_point()
 
     let window   = web_sys::window().unwrap();
     let document = window.document().unwrap();
-    let canvas = document.get_element_by_id("STAFRA_canvas").unwrap().dyn_into::<web_sys::HtmlCanvasElement>().ok();
+    let canvas   = document.get_element_by_id("STAFRA_canvas").unwrap().dyn_into::<web_sys::HtmlCanvasElement>().ok();
 
     let canvas_window = WindowBuilder::new().with_canvas(canvas).build(&event_loop).unwrap();
     wasm_bindgen_futures::spawn_local(run(event_loop, canvas_window));

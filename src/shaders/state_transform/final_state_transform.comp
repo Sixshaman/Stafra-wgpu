@@ -1,0 +1,21 @@
+#version 450
+
+#extension GL_EXT_samplerless_texture_functions: require
+
+//Transfroms the stability buffer data into a colored image
+layout(local_size_x = 32, local_size_y = 32) in;
+
+layout(set = 0, binding = 0) uniform utexture2D finalBoard;
+
+layout(set = 0, binding = 1, r32f) uniform image2D outTex;
+
+void main()
+{
+	uint finalStability = texelFetch(finalBoard, ivec2(gl_GlobalInvocationID.xy), 0).x;
+	if(finalStability >= 2)
+	{
+		finalStability = 0;
+	}
+
+    imageStore(outTex, ivec2(gl_GlobalInvocationID.xy), vec4(finalStability));
+}

@@ -1,0 +1,21 @@
+#version 450
+
+layout(set = 0, binding = 0) uniform ClearParams
+{
+	uvec2 boardSize;
+};
+
+layout(local_size_x = 32, local_size_y = 32) in;
+
+layout(set = 0, binding = 1, r8) uniform image2D outInitialBoard;
+
+void main()
+{
+	uvec2 topLeft     = uvec2(0,               0);
+	uvec2 topRight    = uvec2(boardSize.x - 1, 0);
+	uvec2 bottomLeft  = uvec2(0,               boardSize.y - 1);
+	uvec2 bottomRight = uvec2(boardSize.x - 1, boardSize.y - 1);
+
+	bool res = gl_GlobalInvocationID.xy == topLeft || gl_GlobalInvocationID.xy == topRight || gl_GlobalInvocationID.xy == bottomLeft || gl_GlobalInvocationID.xy == bottomRight;
+    imageStore(outInitialBoard, ivec2(gl_GlobalInvocationID.xy), uvec4(res));
+}
