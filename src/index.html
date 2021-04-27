@@ -1,0 +1,24 @@
+<!doctype html>
+
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
+        <meta http-equiv="Pragma"        content="no-cache"/>
+        <meta http-equiv="Expires"       content="0"/>
+
+        <title>STAFRA WGPU</title>
+
+        <script type="module">
+            import init from './Stafra.js';
+            async function run()
+            {
+                await init();
+            }
+            run();
+        </script>
+    </head>
+    <body>
+        <canvas id="STAFRA_canvas" width="768" height="768"></canvas>
+    </body>
+</html>

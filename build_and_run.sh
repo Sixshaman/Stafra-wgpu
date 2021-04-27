@@ -3,6 +3,8 @@ export CXX=g++
 
 cd static
 
+cp ../src/index.html index.html
+
 ${VULKAN_SDK}/x86_64/bin/glslc ../src/shaders/clear_board/clear_4_corners.comp -o clear_4_corners.spv
 
 ${VULKAN_SDK}/x86_64/bin/glslc ../src/shaders/state_transform/initial_state_transform.comp -o initial_state_transform.spv

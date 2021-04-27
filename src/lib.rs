@@ -26,6 +26,12 @@ struct StafraState
     clear_4_corners_pipeline:         wgpu::ComputePipeline,
     initial_state_transform_pipeline: wgpu::ComputePipeline,
     final_state_transform_pipeline:   wgpu::ComputePipeline,
+
+    //NO NEED FOR THESE, ONLY FOR BIND GROUPS
+    current_board:     wgpu::Texture,
+    next_board:        wgpu::Texture,
+    current_stability: wgpu::Texture,
+    next_stability:    wgpu::Texture
 }
 
 impl StafraState 
@@ -71,42 +77,44 @@ impl StafraState
         let initial_state_transform_module = device.create_shader_module(&wgpu::include_spirv!("../static/initial_state_transform.spv"));
         let final_state_transform_module   = device.create_shader_module(&wgpu::include_spirv!("../static/final_state_transform.spv"));
 
+        let render_state_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor
+        {
+            label: None,
+            entries: 
+            &[
+                wgpu::BindGroupLayoutEntry
+                {
+                    binding: 0,
+                    visibility: wgpu::ShaderStage::FRAGMENT,
+                    ty:         wgpu::BindingType::Texture
+                    {
+                        sample_type:    wgpu::TextureSampleType::Float {filterable: true},
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled:   false,
+                    },
+                    count: None
+                },
+
+                wgpu::BindGroupLayoutEntry
+                {
+                    binding:    1,
+                    visibility: wgpu::ShaderStage::FRAGMENT,
+                    ty:         wgpu::BindingType::Sampler
+                    {
+                        filtering:  true,
+                        comparison: false,
+                    },
+                    count: None
+                },
+            ]
+        });
+
         let render_state_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor 
         {
             label: None,
             bind_group_layouts: 
             &[
-                &device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor
-                {
-                    label: None,
-                    entries: 
-                    &[
-                        wgpu::BindGroupLayoutEntry
-                        {
-                            binding: 0,
-                            visibility: wgpu::ShaderStage::FRAGMENT,
-                            ty:         wgpu::BindingType::Texture
-                            {
-                                sample_type:    wgpu::TextureSampleType::Float {filterable: true},
-                                view_dimension: wgpu::TextureViewDimension::D2,
-                                multisampled:   false,
-                            },
-                            count: None
-                        },
-        
-                        wgpu::BindGroupLayoutEntry
-                        {
-                            binding:    1,
-                            visibility: wgpu::ShaderStage::FRAGMENT,
-                            ty:         wgpu::BindingType::Sampler
-                            {
-                                filtering:  true,
-                                comparison: false,
-                            },
-                            count: None
-                        },
-                    ]
-                })
+                &render_state_bind_group_layout
             ],
             push_constant_ranges: &[],
         });
@@ -251,7 +259,7 @@ impl StafraState
                 module: &render_state_vs_module,
                 entry_point: "main",
                 buffers: &[],
-            },
+            },  
 
             fragment: Some(wgpu::FragmentState 
             {
@@ -308,6 +316,47 @@ impl StafraState
             entry_point: "main"
         });
 
+        let board_texture_descriptor = wgpu::TextureDescriptor
+        {
+            label: None,
+            size:  wgpu::Extent3d
+            {
+                width:                 1024,
+                height:                1024,
+                depth_or_array_layers: 1
+            },
+            mip_level_count: 1,
+            sample_count:    1,
+            dimension:       wgpu::TextureDimension::D2,
+            format:          wgpu::TextureFormat::R8Uint,
+            usage:           wgpu::TextureUsage::SAMPLED | wgpu::TextureUsage::STORAGE
+        };
+
+        let current_board     = device.create_texture(&board_texture_descriptor);
+        let next_board        = device.create_texture(&board_texture_descriptor);
+        let current_stability = device.create_texture(&board_texture_descriptor);
+        let next_stability    = device.create_texture(&board_texture_descriptor);
+
+        let initial_state_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor 
+        {
+            label: None,
+            layout: &render_state_bind_group_layout,
+            entries: 
+            &[
+                wgpu::BindGroupEntry 
+                {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&current_board_view),
+                },
+
+                wgpu::BindGroupEntry 
+                {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(&stafra_sampler),
+                }
+            ]
+        });        
+
         Self
         {
             surface,
@@ -320,7 +369,12 @@ impl StafraState
             render_state_pipeline,
             clear_4_corners_pipeline,
             initial_state_transform_pipeline,
-            final_state_transform_pipeline
+            final_state_transform_pipeline,
+
+            current_board,
+            next_board,
+            current_stability,
+            next_stability
         }
     }
 
