@@ -7,10 +7,7 @@ use winit::
     platform::web::WindowBuilderExtWebSys
 };
 
-use std::borrow::Cow;
-use web_sys::console;
 use wasm_bindgen::JsCast;
-use wasm_bindgen_futures::spawn_local;
 use wasm_bindgen::prelude::*;
 
 struct StafraState 
@@ -27,11 +24,14 @@ struct StafraState
     initial_state_transform_pipeline: wgpu::ComputePipeline,
     final_state_transform_pipeline:   wgpu::ComputePipeline,
 
-    //NO NEED FOR THESE, ONLY FOR BIND GROUPS
+    render_state_bind_group: wgpu::BindGroup,
+
+    #[allow(dead_code)]
     current_board:     wgpu::Texture,
     next_board:        wgpu::Texture,
     current_stability: wgpu::Texture,
-    next_stability:    wgpu::Texture
+    next_stability:    wgpu::Texture,
+    final_state:       wgpu::Texture
 }
 
 impl StafraState 
@@ -316,6 +316,7 @@ impl StafraState
             entry_point: "main"
         });
 
+
         let board_texture_descriptor = wgpu::TextureDescriptor
         {
             label: None,
@@ -332,12 +333,78 @@ impl StafraState
             usage:           wgpu::TextureUsage::SAMPLED | wgpu::TextureUsage::STORAGE
         };
 
+        let final_state_texture_descriptor = wgpu::TextureDescriptor
+        {
+            label: None,
+            size:  wgpu::Extent3d
+            {
+                width:                 1024,
+                height:                1024,
+                depth_or_array_layers: 1
+            },
+            mip_level_count: 1,
+            sample_count:    1,
+            dimension:       wgpu::TextureDimension::D2,
+            format:          wgpu::TextureFormat::R32Float,
+            usage:           wgpu::TextureUsage::SAMPLED | wgpu::TextureUsage::STORAGE
+        };
+
         let current_board     = device.create_texture(&board_texture_descriptor);
         let next_board        = device.create_texture(&board_texture_descriptor);
         let current_stability = device.create_texture(&board_texture_descriptor);
         let next_stability    = device.create_texture(&board_texture_descriptor);
+        let final_state       = device.create_texture(&final_state_texture_descriptor);
 
-        let initial_state_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor 
+
+        let board_view_descriptor = wgpu::TextureViewDescriptor
+        {
+            label:             None,
+            format:            Some(wgpu::TextureFormat::R8Uint),
+            dimension:         Some(wgpu::TextureViewDimension::D2),
+            aspect:            wgpu::TextureAspect::All,
+            base_mip_level:    0,
+            mip_level_count:   None,
+            base_array_layer:  0,
+            array_layer_count: None
+        };
+
+        let final_state_view_descriptor = wgpu::TextureViewDescriptor
+        {
+            label:             None,
+            format:            Some(wgpu::TextureFormat::R32Float),
+            dimension:         Some(wgpu::TextureViewDimension::D2),
+            aspect:            wgpu::TextureAspect::All,
+            base_mip_level:    0,
+            mip_level_count:   None,
+            base_array_layer:  0,
+            array_layer_count: None
+        };
+
+        let current_board_view     = current_board.create_view(&board_view_descriptor);
+        let next_board_view        = next_board.create_view(&board_view_descriptor);
+        let current_stability_view = current_stability.create_view(&board_view_descriptor);
+        let next_stability_view    = next_stability.create_view(&board_view_descriptor);
+        let final_state_view       = final_state.create_view(&final_state_view_descriptor);
+
+
+        let render_state_sampler = device.create_sampler(&wgpu::SamplerDescriptor
+        {
+            label: None,
+            address_mode_u:   wgpu::AddressMode::Repeat,
+            address_mode_v:   wgpu::AddressMode::Repeat,
+            address_mode_w:   wgpu::AddressMode::Repeat,
+            mag_filter:       wgpu::FilterMode::Nearest,
+            min_filter:       wgpu::FilterMode::Linear,
+            mipmap_filter:    wgpu::FilterMode::Linear,
+            lod_min_clamp:    0.0,
+            lod_max_clamp:    0.0,
+            compare:          None,
+            anisotropy_clamp: None,
+            border_color:     None
+        });
+
+
+        let render_state_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor
         {
             label: None,
             layout: &render_state_bind_group_layout,
@@ -346,13 +413,13 @@ impl StafraState
                 wgpu::BindGroupEntry 
                 {
                     binding: 0,
-                    resource: wgpu::BindingResource::TextureView(&current_board_view),
+                    resource: wgpu::BindingResource::TextureView(&final_state_view),
                 },
 
                 wgpu::BindGroupEntry 
                 {
                     binding: 1,
-                    resource: wgpu::BindingResource::Sampler(&stafra_sampler),
+                    resource: wgpu::BindingResource::Sampler(&render_state_sampler),
                 }
             ]
         });        
@@ -371,10 +438,13 @@ impl StafraState
             initial_state_transform_pipeline,
             final_state_transform_pipeline,
 
+            render_state_bind_group,
+
             current_board,
             next_board,
             current_stability,
-            next_stability
+            next_stability,
+            final_state
         }
     }
 
@@ -418,6 +488,7 @@ impl StafraState
             });
 
             render_pass.set_pipeline(&self.render_state_pipeline);
+            render_pass.set_bind_group(0, &self.render_state_bind_group, &[]);
             render_pass.draw(0..3, 0..1);
         }
     
@@ -473,7 +544,6 @@ async fn run(event_loop: EventLoop<()>, canvas_window: Window)
 
                 Err(wgpu::SwapChainError::OutOfMemory) => 
                 {
-                    
                     *control_flow = ControlFlow::Exit;
                 }
 

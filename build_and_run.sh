@@ -1,6 +1,8 @@
 export CC=gcc
 export CXX=g++
 
+mkdir -p static
+
 cd static
 
 cp ../src/index.html index.html

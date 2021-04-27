@@ -1,6 +1,8 @@
 export CC=gcc
 export CXX=g++
 
+mkdir -p static
+
 cd static
 
 ${VULKAN_SDK}/x86_64/bin/glslc ../src/shaders/clear_board/clear_4_corners.comp -o clear_4_corners.spv 
