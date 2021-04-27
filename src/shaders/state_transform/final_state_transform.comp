@@ -7,15 +7,24 @@ layout(local_size_x = 32, local_size_y = 32) in;
 
 layout(set = 0, binding = 0) uniform utexture2D finalBoard;
 
-layout(set = 0, binding = 1, r32f) uniform image2D outTex;
+layout(set = 0, binding = 1, r32f) uniform writeonly image2D outTex;
+
+uvec4 unpackQuadValue(uint packedQuad)
+{
+	//Unpacks a quad
+	return uvec4((packedQuad >>  0) & 0xffu, (packedQuad >>  8) & 0xffu,
+	             (packedQuad >> 16) & 0xffu, (packedQuad >> 24) & 0xffu);
+}
 
 void main()
 {
-	uint finalStability = texelFetch(finalBoard, ivec2(gl_GlobalInvocationID.xy), 0).x;
-	if(finalStability >= 2)
-	{
-		finalStability = 0;
-	}
+	uint  finalStability     = texelFetch(finalBoard, ivec2(gl_GlobalInvocationID.xy), 0).x;
+	uvec4 finalStabilityQuad = unpackQuadValue(finalStability);
 
-    imageStore(outTex, ivec2(gl_GlobalInvocationID.xy), vec4(finalStability));
+	finalStabilityQuad = finalStabilityQuad * uvec4(finalStability < 2); //Zero out all values that have final stability >= 2
+
+    imageStore(outTex, ivec2(gl_GlobalInvocationID.xy) * 2 + ivec2(0, 0), vec4(finalStabilityQuad.x));
+	imageStore(outTex, ivec2(gl_GlobalInvocationID.xy) * 2 + ivec2(1, 0), vec4(finalStabilityQuad.y));
+	imageStore(outTex, ivec2(gl_GlobalInvocationID.xy) * 2 + ivec2(0, 1), vec4(finalStabilityQuad.z));
+	imageStore(outTex, ivec2(gl_GlobalInvocationID.xy) * 2 + ivec2(1, 1), vec4(finalStabilityQuad.w));
 }

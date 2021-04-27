@@ -1,21 +1,28 @@
 #version 450
 
-layout(set = 0, binding = 0) uniform ClearParams
-{
-	uvec2 boardSize;
-};
-
 layout(local_size_x = 32, local_size_y = 32) in;
 
-layout(set = 0, binding = 1, r8) uniform image2D outInitialBoard;
+layout(set = 0, binding = 0, r32ui) uniform writeonly uimage2D outInitialBoard;
+
+uint buildPackedQuadValue(uvec4 values)
+{
+	//Packs a quad encoded as (values.x values.y
+    //                         values.z values.w)
+	//to a single uint32
+	return ((values.x & 0xffu) <<  0) | ((values.y & 0xffu) <<  8)
+	     | ((values.z & 0xffu) << 16) | ((values.w & 0xffu) << 24);
+}
 
 void main()
 {
+	ivec2 boardSize = imageSize(outInitialBoard) * 2;
+
 	uvec2 topLeft     = uvec2(0,               0);
 	uvec2 topRight    = uvec2(boardSize.x - 1, 0);
 	uvec2 bottomLeft  = uvec2(0,               boardSize.y - 1);
 	uvec2 bottomRight = uvec2(boardSize.x - 1, boardSize.y - 1);
 
-	bool res = gl_GlobalInvocationID.xy == topLeft || gl_GlobalInvocationID.xy == topRight || gl_GlobalInvocationID.xy == bottomLeft || gl_GlobalInvocationID.xy == bottomRight;
-    imageStore(outInitialBoard, ivec2(gl_GlobalInvocationID.xy), uvec4(res));
+	uvec4 invocationCoords = uvec4(gl_GlobalInvocationID.xy == topLeft,    gl_GlobalInvocationID.xy == topRight,
+	                               gl_GlobalInvocationID.xy == bottomLeft, gl_GlobalInvocationID.xy == bottomRight);
+    imageStore(outInitialBoard, ivec2(gl_GlobalInvocationID.xy), uvec4(buildPackedQuadValue(invocationCoords)));
 }

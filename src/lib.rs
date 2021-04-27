@@ -3,21 +3,28 @@ use winit::
     event::{Event, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
     window::{WindowBuilder, Window},
-    platform::web::WindowExtWebSys,
     platform::web::WindowBuilderExtWebSys
 };
 
 use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
 
+struct BoardDimensions
+{
+    width:  u32,
+    height: u32
+}
+
 struct StafraState 
 {
-    surface:    wgpu::Surface,
-    device:     wgpu::Device,
-    queue:      wgpu::Queue,
-    sc_desc:    wgpu::SwapChainDescriptor,
-    swap_chain: wgpu::SwapChain,
-    size:       winit::dpi::PhysicalSize<u32>,
+    surface:     wgpu::Surface,
+    device:      wgpu::Device,
+    queue:       wgpu::Queue,
+    sc_desc:     wgpu::SwapChainDescriptor,
+    swap_chain:  wgpu::SwapChain,
+    window_size: winit::dpi::PhysicalSize<u32>,
+
+    board_size: BoardDimensions,
 
     render_state_pipeline:            wgpu::RenderPipeline,
     clear_4_corners_pipeline:         wgpu::ComputePipeline,
@@ -36,9 +43,9 @@ struct StafraState
 
 impl StafraState 
 {
-    async fn new(window: &Window) -> Self 
+    async fn new(window: &Window, board_size: BoardDimensions) -> Self
     {
-        let size = window.inner_size();
+        let window_size = window.inner_size();
 
         let wgpu_instance = wgpu::Instance::new(wgpu::BackendBit::PRIMARY);
         let surface = unsafe{ wgpu_instance.create_surface(window) };
@@ -62,8 +69,8 @@ impl StafraState
         {
             usage:        wgpu::TextureUsage::RENDER_ATTACHMENT,
             format:       swapchain_format,
-            width:        size.width,
-            height:       size.height,
+            width:        window_size.width,
+            height:       window_size.height,
             present_mode: wgpu::PresentMode::Fifo,
         };
 
@@ -131,25 +138,12 @@ impl StafraState
                     &[
                         wgpu::BindGroupLayoutEntry
                         {
-                            binding:    0,
-                            visibility: wgpu::ShaderStage::COMPUTE,
-                            ty:         wgpu::BindingType::Buffer
-                            {
-                                ty: wgpu::BufferBindingType::Uniform,
-                                has_dynamic_offset: false,
-                                min_binding_size: core::num::NonZeroU64::new(8)
-                            },
-                            count: None
-                        },
-
-                        wgpu::BindGroupLayoutEntry
-                        {
-                            binding: 1,
+                            binding: 0,
                             visibility: wgpu::ShaderStage::COMPUTE,
                             ty:         wgpu::BindingType::StorageTexture
                             {
                                 access:         wgpu::StorageTextureAccess::WriteOnly,
-                                format:         wgpu::TextureFormat::R8Uint,
+                                format:         wgpu::TextureFormat::R32Uint,
                                 view_dimension: wgpu::TextureViewDimension::D2,
                             },
                             count: None
@@ -157,14 +151,7 @@ impl StafraState
                     ]
                 })
             ],
-            push_constant_ranges: 
-            &[
-                wgpu::PushConstantRange
-                {
-                    stages: wgpu::ShaderStage::COMPUTE,
-                    range:  0..8
-                }
-            ],
+            push_constant_ranges: &[]
         });
 
         let initial_state_transform_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor 
@@ -183,7 +170,7 @@ impl StafraState
                             visibility: wgpu::ShaderStage::COMPUTE,
                             ty:         wgpu::BindingType::Texture
                             {
-                                sample_type:    wgpu::TextureSampleType::Float {filterable: false},
+                                sample_type:    wgpu::TextureSampleType::Float {filterable: true},
                                 view_dimension: wgpu::TextureViewDimension::D2,
                                 multisampled:   false,
                             },
@@ -192,12 +179,24 @@ impl StafraState
 
                         wgpu::BindGroupLayoutEntry
                         {
-                            binding: 1,
+                            binding:    1,
+                            visibility: wgpu::ShaderStage::COMPUTE,
+                            ty:         wgpu::BindingType::Sampler
+                            {
+                                filtering:  false,
+                                comparison: false,
+                            },
+                            count: None
+                        },
+
+                        wgpu::BindGroupLayoutEntry
+                        {
+                            binding: 2,
                             visibility: wgpu::ShaderStage::COMPUTE,
                             ty:         wgpu::BindingType::StorageTexture
                             {
                                 access:         wgpu::StorageTextureAccess::WriteOnly,
-                                format:         wgpu::TextureFormat::R8Uint,
+                                format:         wgpu::TextureFormat::R32Uint,
                                 view_dimension: wgpu::TextureViewDimension::D2,
                             },
                             count: None
@@ -322,14 +321,14 @@ impl StafraState
             label: None,
             size:  wgpu::Extent3d
             {
-                width:                 1024,
-                height:                1024,
+                width:                 (board_size.width  + 1) / 2,
+                height:                (board_size.height + 1) / 2,
                 depth_or_array_layers: 1
             },
             mip_level_count: 1,
             sample_count:    1,
             dimension:       wgpu::TextureDimension::D2,
-            format:          wgpu::TextureFormat::R8Uint,
+            format:          wgpu::TextureFormat::R32Uint,
             usage:           wgpu::TextureUsage::SAMPLED | wgpu::TextureUsage::STORAGE
         };
 
@@ -338,8 +337,8 @@ impl StafraState
             label: None,
             size:  wgpu::Extent3d
             {
-                width:                 1024,
-                height:                1024,
+                width:                 board_size.width,
+                height:                board_size.height,
                 depth_or_array_layers: 1
             },
             mip_level_count: 1,
@@ -355,11 +354,10 @@ impl StafraState
         let next_stability    = device.create_texture(&board_texture_descriptor);
         let final_state       = device.create_texture(&final_state_texture_descriptor);
 
-
         let board_view_descriptor = wgpu::TextureViewDescriptor
         {
             label:             None,
-            format:            Some(wgpu::TextureFormat::R8Uint),
+            format:            Some(wgpu::TextureFormat::R32Uint),
             dimension:         Some(wgpu::TextureViewDimension::D2),
             aspect:            wgpu::TextureAspect::All,
             base_mip_level:    0,
@@ -431,7 +429,9 @@ impl StafraState
             queue,
             sc_desc,
             swap_chain,
-            size,
+            window_size,
+
+            board_size,
 
             render_state_pipeline,
             clear_4_corners_pipeline,
@@ -450,7 +450,7 @@ impl StafraState
 
     fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) 
     {
-        self.size           = new_size;
+        self.window_size    = new_size;
         self.sc_desc.width  = new_size.width;
         self.sc_desc.height = new_size.height;
         self.swap_chain     = self.device.create_swap_chain(&self.surface, &self.sc_desc);
@@ -500,7 +500,7 @@ impl StafraState
 
 async fn run(event_loop: EventLoop<()>, canvas_window: Window)
 {
-    let mut state = StafraState::new(&canvas_window).await; 
+    let mut state = StafraState::new(&canvas_window, BoardDimensions {width: 1023, height: 1023}).await;
 
     event_loop.run(move |event, _, control_flow| match event
     {
@@ -539,7 +539,7 @@ async fn run(event_loop: EventLoop<()>, canvas_window: Window)
 
                 Err(wgpu::SwapChainError::Lost) => 
                 {
-                    state.resize(state.size);
+                    state.resize(state.window_size);
                 }
 
                 Err(wgpu::SwapChainError::OutOfMemory) => 
