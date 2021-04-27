@@ -110,6 +110,7 @@ web-sys = { version = "=0.3.50", features = [
     "GpuValidationError",
     "GpuVertexFormat",
     "HtmlCanvasElement",
+    "HtmlButtonElement",
     "Window"
 ]}
 

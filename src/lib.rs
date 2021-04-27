@@ -41,6 +41,14 @@ struct StafraState
     final_state:       wgpu::Texture
 }
 
+enum StafraEvent
+{
+    SavePng
+    {
+
+    }
+}
+
 impl StafraState 
 {
     async fn new(window: &Window, board_size: BoardDimensions) -> Self
@@ -456,6 +464,61 @@ impl StafraState
         self.swap_chain     = self.device.create_swap_chain(&self.surface, &self.sc_desc);
     }
 
+    async fn save_png(&self)
+    {
+        let row_alignment   = 256 as usize;
+        let board_row_pitch = ((self.board_size.width as usize * std::mem::size_of::<f32>()) + (row_alignment - 1)) & (!row_alignment);
+
+        let board_buffer = self.device.create_buffer(&wgpu::BufferDescriptor
+        {
+            label:              None,
+            size:               (board_row_pitch * self.board_size.height as usize) as u64,
+            usage:              wgpu::BufferUsage::MAP_READ | wgpu::BufferUsage::COPY_DST,
+            mapped_at_creation: false
+        });
+
+        let mut buffer_copy_encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor{label: None});
+
+        buffer_copy_encoder.copy_texture_to_buffer(wgpu::ImageCopyTexture
+        {
+            texture:   &self.final_state,
+            mip_level: 0,
+            origin:    wgpu::Origin3d
+            {
+                x: 0,
+                y: 0,
+                z: 0
+            }
+        },
+        wgpu::ImageCopyBuffer
+        {
+            buffer: &board_buffer,
+            layout: wgpu::ImageDataLayout
+            {
+                offset:         0,
+                bytes_per_row:  std::num::NonZeroU32::new(board_row_pitch as u32),
+                rows_per_image: std::num::NonZeroU32::new(self.board_size.height)
+            }
+        },
+        wgpu::Extent3d
+        {
+            width:                 self.board_size.width,
+            height:                self.board_size.height,
+            depth_or_array_layers: 1
+        });
+
+        self.queue.submit(std::iter::once(buffer_copy_encoder.finish()));
+
+        let png_buffer_slice  = board_buffer.slice(..);
+        png_buffer_slice.map_async(wgpu::MapMode::Read).await;
+
+        let png_buffer_view = png_buffer_slice.get_mapped_range();
+        for row_chunk in png_buffer_view.chunks(board_row_pitch)
+        {
+
+        }
+    }
+
     fn update(&mut self) 
     {
         todo!()
@@ -498,7 +561,7 @@ impl StafraState
     }
 }
 
-async fn run(event_loop: EventLoop<()>, canvas_window: Window)
+async fn run(event_loop: EventLoop<StafraEvent>, canvas_window: Window)
 {
     let mut state = StafraState::new(&canvas_window, BoardDimensions {width: 1023, height: 1023}).await;
 
@@ -560,6 +623,17 @@ async fn run(event_loop: EventLoop<()>, canvas_window: Window)
             canvas_window.request_redraw();
         }
 
+        Event::UserEvent(stafraEvent) =>
+        {
+            match stafraEvent
+            {
+                StafraEvent::SavePng {} =>
+                {
+                    state.save_png();
+                }
+            }
+        }
+
         _ => {}
     });
 }
@@ -567,7 +641,8 @@ async fn run(event_loop: EventLoop<()>, canvas_window: Window)
 #[wasm_bindgen(start)]
 pub fn entry_point()
 {
-    let event_loop = EventLoop::new();
+    let event_loop: EventLoop<StafraEvent> = EventLoop::with_user_event();
+    let event_loop_proxy                   = event_loop.create_proxy();
 
     let window   = web_sys::window().unwrap();
     let document = window.document().unwrap();
@@ -575,4 +650,14 @@ pub fn entry_point()
 
     let canvas_window = WindowBuilder::new().with_canvas(canvas).build(&event_loop).unwrap();
     wasm_bindgen_futures::spawn_local(run(event_loop, canvas_window));
+
+    let save_png_function = Closure::wrap(Box::new(||
+    {
+        web_sys::console::log_1(&"You are adorable".into());
+        //event_loop_proxy.send_event(UserEvent::SavePng {})
+    }) as Box<dyn Fn()>);
+
+    let save_png_button = document.get_element_by_id("save_png_button").unwrap().dyn_into::<web_sys::HtmlButtonElement>().unwrap();
+    save_png_button.set_onclick(Some(save_png_function.as_ref().unchecked_ref()));
+    save_png_function.forget();
 }
