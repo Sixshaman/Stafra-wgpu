@@ -532,7 +532,7 @@ impl StafraState
         let waker = dummy_waker::dummy_waker();
         let mut context = Context::from_waker(&waker);
 
-        let start_time = web_sys:;
+        let start_time = Instant::now();
         loop
         {
             //Busy wait because asyncs in winit are impossible at the time of writing this code
