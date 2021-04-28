@@ -8,6 +8,9 @@ use winit::
 
 use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
+use winit::event_loop::EventLoopProxy;
+use std::rc::Rc;
+use std::cell::RefCell;
 
 struct BoardDimensions
 {
@@ -41,11 +44,19 @@ struct StafraState
     final_state:       wgpu::Texture
 }
 
-enum StafraEvent
+struct AppState
+{
+    event_loop:       EventLoop<AppEvent>,
+    event_loop_proxy: Rc<RefCell<EventLoopProxy<AppEvent>>>,
+    canvas_window:    Window,
+
+    save_png_function: Closure<dyn Fn()>,
+}
+
+enum AppEvent
 {
     SavePng
     {
-
     }
 }
 
@@ -561,103 +572,122 @@ impl StafraState
     }
 }
 
-async fn run(event_loop: EventLoop<StafraEvent>, canvas_window: Window)
+impl AppState
 {
-    let mut state = StafraState::new(&canvas_window, BoardDimensions {width: 1023, height: 1023}).await;
-
-    event_loop.run(move |event, _, control_flow| match event
+    fn new() -> Self
     {
-        Event::WindowEvent 
+        let event_loop: EventLoop<AppEvent> = EventLoop::with_user_event();
+        let event_loop_proxy                = Rc::new(RefCell::new(event_loop.create_proxy()));
+
+        let window   = web_sys::window().unwrap();
+        let document = window.document().unwrap();
+        let canvas   = document.get_element_by_id("STAFRA_canvas").unwrap().dyn_into::<web_sys::HtmlCanvasElement>().ok();
+
+        let canvas_window = WindowBuilder::new().with_canvas(canvas).build(&event_loop).unwrap();
+
+        let event_loop_proxy_cloned = event_loop_proxy.clone();
+        let save_png_function = Closure::wrap(Box::new(move ||
         {
-            ref event,
-            window_id,
-        } 
-        if window_id == canvas_window.id() => match event 
+            event_loop_proxy_cloned.borrow_mut().send_event(AppEvent::SavePng {});
+        }) as Box<dyn Fn()>);
+
+        let save_png_button = document.get_element_by_id("save_png_button").unwrap().dyn_into::<web_sys::HtmlButtonElement>().unwrap();
+        save_png_button.set_onclick(Some(save_png_function.as_ref().unchecked_ref()));
+
+        Self
         {
-            WindowEvent::CloseRequested => 
+            event_loop,
+            event_loop_proxy,
+            canvas_window,
+
+            save_png_function
+        }
+    }
+
+    async fn run(self)
+    {
+        let canvas_window = self.canvas_window;
+        let event_loop    = self.event_loop;
+
+        let mut state = StafraState::new(&canvas_window, BoardDimensions {width: 1023, height: 1023});
+        event_loop.run(move |event, _, control_flow| match event
+        {
+            Event::WindowEvent
             {
-                *control_flow = ControlFlow::Exit;
+                ref event,
+                window_id,
             }
-
-            WindowEvent::Resized(physical_size) => 
+            if window_id == canvas_window.id() => match event
             {
-                state.resize(*physical_size);
-            }
-
-            WindowEvent::ScaleFactorChanged { new_inner_size, .. } => 
-            {
-                state.resize(**new_inner_size);
-            }            
-            _ => {}
-        },
-
-        Event::RedrawRequested(_) => 
-        {
-            //state.update();
-            match state.render() 
-            {
-                Ok(_) => 
-                {
-                }
-
-                Err(wgpu::SwapChainError::Lost) => 
-                {
-                    state.resize(state.window_size);
-                }
-
-                Err(wgpu::SwapChainError::OutOfMemory) => 
+                WindowEvent::CloseRequested =>
                 {
                     *control_flow = ControlFlow::Exit;
                 }
 
-                Err(e) => 
+                WindowEvent::Resized(physical_size) =>
                 {
-                    let err_str = format!("{:?}", e);
-                    web_sys::console::log_1(&err_str.into());
+                    state.resize(*physical_size);
                 }
-            }
-        }
-        
-        Event::MainEventsCleared => 
-        {
-            canvas_window.request_redraw();
-        }
 
-        Event::UserEvent(stafraEvent) =>
-        {
-            match stafraEvent
+                WindowEvent::ScaleFactorChanged {new_inner_size, ..} =>
+                {
+                    state.resize(**new_inner_size);
+                }
+
+                _ => {}
+            },
+
+            Event::RedrawRequested(_) =>
             {
-                StafraEvent::SavePng {} =>
+                //state.update();
+                match state.render()
                 {
-                    state.save_png();
+                    Ok(_) =>
+                    {
+                    }
+
+                    Err(wgpu::SwapChainError::Lost) =>
+                    {
+                        state.resize(state.window_size);
+                    }
+
+                    Err(wgpu::SwapChainError::OutOfMemory) =>
+                    {
+                        *control_flow = ControlFlow::Exit;
+                    }
+
+                    Err(e) =>
+                    {
+                        let err_str = format!("{:?}", e);
+                        web_sys::console::log_1(&err_str.into());
+                    }
                 }
             }
-        }
 
-        _ => {}
-    });
+            Event::MainEventsCleared =>
+            {
+                canvas_window.request_redraw();
+            }
+
+            Event::UserEvent(app_event) =>
+            {
+                match app_event
+                {
+                    AppEvent::SavePng {} =>
+                    {
+                        cloned_state.into().save_png();
+                    }
+                }
+            }
+
+            _ => {}
+        });
+    }
 }
 
 #[wasm_bindgen(start)]
 pub fn entry_point()
 {
-    let event_loop: EventLoop<StafraEvent> = EventLoop::with_user_event();
-    let event_loop_proxy                   = event_loop.create_proxy();
-
-    let window   = web_sys::window().unwrap();
-    let document = window.document().unwrap();
-    let canvas   = document.get_element_by_id("STAFRA_canvas").unwrap().dyn_into::<web_sys::HtmlCanvasElement>().ok();
-
-    let canvas_window = WindowBuilder::new().with_canvas(canvas).build(&event_loop).unwrap();
-    wasm_bindgen_futures::spawn_local(run(event_loop, canvas_window));
-
-    let save_png_function = Closure::wrap(Box::new(||
-    {
-        web_sys::console::log_1(&"You are adorable".into());
-        //event_loop_proxy.send_event(UserEvent::SavePng {})
-    }) as Box<dyn Fn()>);
-
-    let save_png_button = document.get_element_by_id("save_png_button").unwrap().dyn_into::<web_sys::HtmlButtonElement>().unwrap();
-    save_png_button.set_onclick(Some(save_png_function.as_ref().unchecked_ref()));
-    save_png_function.forget();
+    let mut app_state = AppState::new();
+    wasm_bindgen_futures::spawn_local(app_state.run());
 }
