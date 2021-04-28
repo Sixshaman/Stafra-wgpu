@@ -1,3 +1,5 @@
+mod dummy_waker;
+
 use winit::
 {
     event::{Event, WindowEvent},
@@ -9,8 +11,12 @@ use winit::
 use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
 use winit::event_loop::EventLoopProxy;
+use std::pin::Pin;
 use std::rc::Rc;
-use std::cell::RefCell;
+use std::task::Context;
+use futures::Future;
+use std::time::{Instant, Duration};
+use std::error::Error;
 
 struct BoardDimensions
 {
@@ -47,7 +53,7 @@ struct StafraState
 struct AppState
 {
     event_loop:       EventLoop<AppEvent>,
-    event_loop_proxy: Rc<RefCell<EventLoopProxy<AppEvent>>>,
+    event_loop_proxy: Rc<EventLoopProxy<AppEvent>>,
     canvas_window:    Window,
 
     save_png_function: Closure<dyn Fn()>,
@@ -57,10 +63,10 @@ enum AppEvent
 {
     SavePng
     {
-    }
+    },
 }
 
-impl StafraState 
+impl StafraState
 {
     async fn new(window: &Window, board_size: BoardDimensions) -> Self
     {
@@ -364,7 +370,7 @@ impl StafraState
             sample_count:    1,
             dimension:       wgpu::TextureDimension::D2,
             format:          wgpu::TextureFormat::R32Float,
-            usage:           wgpu::TextureUsage::SAMPLED | wgpu::TextureUsage::STORAGE
+            usage:           wgpu::TextureUsage::SAMPLED | wgpu::TextureUsage::STORAGE | wgpu::TextureUsage::COPY_SRC
         };
 
         let current_board     = device.create_texture(&board_texture_descriptor);
@@ -475,15 +481,15 @@ impl StafraState
         self.swap_chain     = self.device.create_swap_chain(&self.surface, &self.sc_desc);
     }
 
-    async fn save_png(&self)
+    fn save_png(&self) -> Result<(), &str>
     {
-        let row_alignment   = 256 as usize;
-        let board_row_pitch = ((self.board_size.width as usize * std::mem::size_of::<f32>()) + (row_alignment - 1)) & (!row_alignment);
+        let row_alignment = 256 as usize;
+        let row_pitch     = ((self.board_size.width as usize * std::mem::size_of::<f32>()) + (row_alignment - 1)) & (!(row_alignment - 1));
 
         let board_buffer = self.device.create_buffer(&wgpu::BufferDescriptor
         {
             label:              None,
-            size:               (board_row_pitch * self.board_size.height as usize) as u64,
+            size:               (row_pitch * self.board_size.height as usize) as u64,
             usage:              wgpu::BufferUsage::MAP_READ | wgpu::BufferUsage::COPY_DST,
             mapped_at_creation: false
         });
@@ -507,7 +513,7 @@ impl StafraState
             layout: wgpu::ImageDataLayout
             {
                 offset:         0,
-                bytes_per_row:  std::num::NonZeroU32::new(board_row_pitch as u32),
+                bytes_per_row:  std::num::NonZeroU32::new(row_pitch as u32),
                 rows_per_image: std::num::NonZeroU32::new(self.board_size.height)
             }
         },
@@ -520,22 +526,48 @@ impl StafraState
 
         self.queue.submit(std::iter::once(buffer_copy_encoder.finish()));
 
-        let png_buffer_slice  = board_buffer.slice(..);
-        png_buffer_slice.map_async(wgpu::MapMode::Read).await;
+        let png_buffer_slice      = board_buffer.slice(..);
+        let mut buffer_map_future = png_buffer_slice.map_async(wgpu::MapMode::Read);
+
+        let waker = dummy_waker::dummy_waker();
+        let mut context = Context::from_waker(&waker);
+
+        let start_time = web_sys:;
+        loop
+        {
+            //Busy wait because asyncs in winit are impossible at the time of writing this code
+            let pinned_future = Pin::new(&mut buffer_map_future);
+            match Future::poll(pinned_future, &mut context)
+            {
+                std::task::Poll::Ready(_) => break,
+                std::task::Poll::Pending =>
+                {
+                    self.device.poll(wgpu::Maintain::Poll);
+
+                    let current_time = Instant::now();
+                    if(current_time - start_time > Duration::from_secs(2)) //Max busy wait time
+                    {
+                        return Err("Timeout");
+                    }
+                }
+            }
+        }
 
         let png_buffer_view = png_buffer_slice.get_mapped_range();
-        for row_chunk in png_buffer_view.chunks(board_row_pitch)
+        for row_chunk in png_buffer_view.chunks(row_pitch)
         {
-
+            todo!()
         }
+
+        Ok(())
     }
 
     fn update(&mut self) 
     {
-        todo!()
+
     }
 
-    fn render(&mut self) -> Result<(), wgpu::SwapChainError> 
+    fn render(&mut self) -> Result<(), wgpu::SwapChainError>
     {
         let frame = self.swap_chain.get_current_frame()?.output;
 
@@ -574,10 +606,10 @@ impl StafraState
 
 impl AppState
 {
-    fn new() -> Self
+    fn new<'a>() -> Self
     {
         let event_loop: EventLoop<AppEvent> = EventLoop::with_user_event();
-        let event_loop_proxy                = Rc::new(RefCell::new(event_loop.create_proxy()));
+        let event_loop_proxy                = Rc::new(event_loop.create_proxy());
 
         let window   = web_sys::window().unwrap();
         let document = window.document().unwrap();
@@ -588,7 +620,7 @@ impl AppState
         let event_loop_proxy_cloned = event_loop_proxy.clone();
         let save_png_function = Closure::wrap(Box::new(move ||
         {
-            event_loop_proxy_cloned.borrow_mut().send_event(AppEvent::SavePng {});
+            event_loop_proxy_cloned.send_event(AppEvent::SavePng {});
         }) as Box<dyn Fn()>);
 
         let save_png_button = document.get_element_by_id("save_png_button").unwrap().dyn_into::<web_sys::HtmlButtonElement>().unwrap();
@@ -609,7 +641,7 @@ impl AppState
         let canvas_window = self.canvas_window;
         let event_loop    = self.event_loop;
 
-        let mut state = StafraState::new(&canvas_window, BoardDimensions {width: 1023, height: 1023});
+        let mut state = StafraState::new(&canvas_window, BoardDimensions {width: 1023, height: 1023}).await;
         event_loop.run(move |event, _, control_flow| match event
         {
             Event::WindowEvent
@@ -675,7 +707,15 @@ impl AppState
                 {
                     AppEvent::SavePng {} =>
                     {
-                        cloned_state.into().save_png();
+                        match state.save_png()
+                        {
+                            Ok(_) => {},
+
+                            Err(message) =>
+                            {
+                                web_sys::console::log_1(&format!("Error saving image: {}", message).into());
+                            }
+                        }
                     }
                 }
             }
