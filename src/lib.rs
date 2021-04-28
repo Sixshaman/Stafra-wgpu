@@ -14,9 +14,7 @@ use winit::event_loop::EventLoopProxy;
 use std::pin::Pin;
 use std::rc::Rc;
 use std::task::Context;
-use futures::Future;
-use std::time::{Instant, Duration};
-use std::error::Error;
+use futures::{Future, FutureExt};
 
 struct BoardDimensions
 {
@@ -491,7 +489,7 @@ impl StafraState
             label:              None,
             size:               (row_pitch * self.board_size.height as usize) as u64,
             usage:              wgpu::BufferUsage::MAP_READ | wgpu::BufferUsage::COPY_DST,
-            mapped_at_creation: false
+            mapped_at_creation: true
         });
 
         let mut buffer_copy_encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor{label: None});
@@ -532,7 +530,8 @@ impl StafraState
         let waker = dummy_waker::dummy_waker();
         let mut context = Context::from_waker(&waker);
 
-        let start_time = Instant::now();
+        let performance = web_sys::window().unwrap().performance().unwrap();
+        let start_time  = performance.now();
         loop
         {
             //Busy wait because asyncs in winit are impossible at the time of writing this code
@@ -542,11 +541,10 @@ impl StafraState
                 std::task::Poll::Ready(_) => break,
                 std::task::Poll::Pending =>
                 {
-                    self.device.poll(wgpu::Maintain::Poll);
-
-                    let current_time = Instant::now();
-                    if(current_time - start_time > Duration::from_secs(2)) //Max busy wait time
+                    let current_time = performance.now();
+                    if(current_time - start_time > 2000.0) //Max busy wait time is 2 seconds
                     {
+                        board_buffer.unmap();
                         return Err("Timeout");
                     }
                 }
@@ -559,6 +557,7 @@ impl StafraState
             todo!()
         }
 
+        board_buffer.unmap();
         Ok(())
     }
 
@@ -606,7 +605,7 @@ impl StafraState
 
 impl AppState
 {
-    fn new<'a>() -> Self
+    fn new() -> Self
     {
         let event_loop: EventLoop<AppEvent> = EventLoop::with_user_event();
         let event_loop_proxy                = Rc::new(event_loop.create_proxy());
