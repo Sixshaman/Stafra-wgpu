@@ -893,7 +893,7 @@ impl AppState
         let canvas_window = self.canvas_window;
         let event_loop    = self.event_loop;
 
-        let mut state = StafraState::new(&canvas_window, BoardDimensions {width: 1023, height: 1023}).await;
+        let mut state = StafraState::new(&canvas_window, BoardDimensions {width: 63, height: 63}).await;
         state.reset_board();
 
         event_loop.run(move |event, _, control_flow| match event

@@ -71,14 +71,15 @@ void main()
     uint quadBottomState = ((bottomQuad & topQuadMask)    << 16) | ((thisQuad & bottomQuadMask) >> 16);
 
     uvec2 rightBottomCoord = imageSize(nextBoard) + ivec2(-1, -1); //Board size is always 2^n - 1. Need to mask out the bottom and right edge
-    uint  edgeMask         = ~(0xffffff00 * uint(any(equal(gl_GlobalInvocationID.xy, rightBottomCoord))));
+    bvec2 onRightBottom    = equal(gl_GlobalInvocationID.xy, rightBottomCoord);
+    uvec2 rightBottomMask  = uvec2(rightQuadMask, bottomQuadMask) * uvec2(onRightBottom);
 
-    uint modulo2Mask   = 0x01010101u & edgeMask;
+    uint modulo2Mask   = 0x01010101u & ~(rightBottomMask.x | rightBottomMask.y);
     uint quadNextState = (thisQuad + quadLeftState + quadRightState + quadTopState + quadBottomState) & modulo2Mask;
 
     uint prevStabilityState = texelFetch(prevStability, ivec2(gl_GlobalInvocationID.xy), 0).x;
     uint nextStabilityState = (prevStabilityState & ~(quadNextState ^ quadThisState));
 
     imageStore(nextBoard,     ivec2(gl_GlobalInvocationID.xy), uvec4(quadNextState));
-    imageStore(nextStability, ivec2(gl_GlobalInvocationID.xy), uvec4(quadThisState));
+    imageStore(nextStability, ivec2(gl_GlobalInvocationID.xy), uvec4(modulo2Mask));
 }
