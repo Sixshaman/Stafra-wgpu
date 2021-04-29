@@ -15,6 +15,8 @@ use std::pin::Pin;
 use std::rc::Rc;
 use std::task::Context;
 use futures::{Future, FutureExt};
+use std::slice::Chunks;
+use std::convert::TryInto;
 
 struct BoardDimensions
 {
@@ -527,6 +529,8 @@ impl StafraState
         let png_buffer_slice      = board_buffer.slice(..);
         let mut buffer_map_future = png_buffer_slice.map_async(wgpu::MapMode::Read);
 
+        let mut image_array = Vec::with_capacity((self.board_size.width * self.board_size.height * 4) as usize);
+
         let waker = dummy_waker::dummy_waker();
         let mut context = Context::from_waker(&waker);
 
@@ -554,10 +558,21 @@ impl StafraState
         let png_buffer_view = png_buffer_slice.get_mapped_range();
         for row_chunk in png_buffer_view.chunks(row_pitch)
         {
-            todo!()
+            for texel in row_chunk.chunks(4)
+            {
+                let val = f32::from_le_bytes(texel[0..4].try_into().unwrap());
+
+                image_array.push((val * 255.0) as u8); //Red
+                image_array.push(0u8);                 //Green
+                image_array.push((val * 255.0) as u8); //Blue
+                image_array.push(255u8);               //Alpha
+            }
         }
 
         board_buffer.unmap();
+
+        let image_data = web_sys::ImageData::new_with_u8_clamped_array(image_array.as_slice());
+
         Ok(())
     }
 
@@ -708,11 +723,14 @@ impl AppState
                     {
                         match state.save_png()
                         {
-                            Ok(_) => {},
+                            Ok(_) =>
+                            {
+
+                            },
 
                             Err(message) =>
                             {
-                                web_sys::console::log_1(&format!("Error saving image: {}", message).into());
+                                web_sys::console::log_1(&format!("Error saving BDFG image: {}", message).into());
                             }
                         }
                     }
