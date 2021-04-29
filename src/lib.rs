@@ -16,7 +16,6 @@ use std::rc::Rc;
 use std::task::Context;
 use futures::Future;
 use std::convert::TryInto;
-use web_sys::Document;
 
 struct BoardDimensions
 {
@@ -52,7 +51,7 @@ struct StafraState
 
 struct AppState
 {
-    document: Document,
+    document: web_sys::Document,
 
     event_loop:       EventLoop<AppEvent>,
     event_loop_proxy: Rc<EventLoopProxy<AppEvent>>,
@@ -313,7 +312,7 @@ impl StafraState
                 clamp_depth:        false,
                 polygon_mode:       wgpu::PolygonMode::Fill,
                 conservative:       false
-            },      
+            },
       
             multisample: wgpu::MultisampleState::default(),
         });
@@ -594,11 +593,11 @@ impl StafraState
                 &[
                     wgpu::RenderPassColorAttachment
                     {
-                        view: &frame.view,
+                        view:           &frame.view,
                         resolve_target: None,
-                        ops: wgpu::Operations 
+                        ops:            wgpu::Operations
                         {
-                            load: wgpu::LoadOp::Clear(wgpu::Color::GREEN),
+                            load:  wgpu::LoadOp::Clear(wgpu::Color::GREEN),
                             store: true,
                         },
                     }
@@ -727,9 +726,9 @@ impl AppState
                     {
                         match state.get_png_data()
                         {
-                            Ok(image_array) =>
+                            Ok(mut image_array) =>
                             {
-                                let image_data = web_sys::ImageData::new_with_u8_clamped_array(Clamped(image_array.as_slice()), state.board_size.width).unwrap();
+                                let image_data = web_sys::ImageData::new_with_u8_clamped_array(Clamped(image_array.as_mut_slice()), state.board_size.width).unwrap();
 
                                 let canvas = document.create_element("canvas").unwrap().dyn_into::<web_sys::HtmlCanvasElement>().unwrap();
                                 canvas.set_width(state.board_size.width);

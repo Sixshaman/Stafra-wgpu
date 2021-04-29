@@ -14,8 +14,7 @@ set RUSTFLAGS=--cfg=web_sys_unstable_apis
 %VULKAN_SDK%/Bin/glslc ../src/shaders/render/render_state.vert -o render_state_vs.spv
 %VULKAN_SDK%/Bin/glslc ../src/shaders/render/render_state.frag -o render_state_fs.spv
 
-cargo build --release --no-default-features --target wasm32-unknown-unknown --features winit/web-sys
-wasm-bindgen --no-typescript --target web --out-name Stafra --out-dir ../static ../target/wasm32-unknown-unknown/release/stafra_wgpu.wasm
+wasm-pack build --release --target web --out-name Stafra --out-dir static -- --features winit/web-sys
 miniserve --index index.html
 
 set RUSTFLAGS=
