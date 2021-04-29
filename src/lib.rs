@@ -8,15 +8,15 @@ use winit::
     platform::web::WindowBuilderExtWebSys
 };
 
-use wasm_bindgen::JsCast;
+use wasm_bindgen::{JsCast, Clamped};
 use wasm_bindgen::prelude::*;
 use winit::event_loop::EventLoopProxy;
 use std::pin::Pin;
 use std::rc::Rc;
 use std::task::Context;
-use futures::{Future, FutureExt};
-use std::slice::Chunks;
+use futures::Future;
 use std::convert::TryInto;
+use web_sys::Document;
 
 struct BoardDimensions
 {
@@ -52,6 +52,8 @@ struct StafraState
 
 struct AppState
 {
+    document: Document,
+
     event_loop:       EventLoop<AppEvent>,
     event_loop_proxy: Rc<EventLoopProxy<AppEvent>>,
     canvas_window:    Window,
@@ -481,7 +483,7 @@ impl StafraState
         self.swap_chain     = self.device.create_swap_chain(&self.surface, &self.sc_desc);
     }
 
-    fn save_png(&self) -> Result<(), &str>
+    fn get_png_data(&self) -> Result<Vec<u8>, &str>
     {
         let row_alignment = 256 as usize;
         let row_pitch     = ((self.board_size.width as usize * std::mem::size_of::<f32>()) + (row_alignment - 1)) & (!(row_alignment - 1));
@@ -491,7 +493,7 @@ impl StafraState
             label:              None,
             size:               (row_pitch * self.board_size.height as usize) as u64,
             usage:              wgpu::BufferUsage::MAP_READ | wgpu::BufferUsage::COPY_DST,
-            mapped_at_creation: true
+            mapped_at_creation: false
         });
 
         let mut buffer_copy_encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor{label: None});
@@ -538,7 +540,7 @@ impl StafraState
         let start_time  = performance.now();
         loop
         {
-            //Busy wait because asyncs in winit are impossible at the time of writing this code
+            //Busy wait because asyncs in winit don't work at the time of writing this code
             let pinned_future = Pin::new(&mut buffer_map_future);
             match Future::poll(pinned_future, &mut context)
             {
@@ -546,7 +548,7 @@ impl StafraState
                 std::task::Poll::Pending =>
                 {
                     let current_time = performance.now();
-                    if(current_time - start_time > 2000.0) //Max busy wait time is 2 seconds
+                    if current_time - start_time > 2000.0 //Max busy wait time is 2 seconds
                     {
                         board_buffer.unmap();
                         return Err("Timeout");
@@ -571,9 +573,7 @@ impl StafraState
 
         board_buffer.unmap();
 
-        let image_data = web_sys::ImageData::new_with_u8_clamped_array(image_array.as_slice());
-
-        Ok(())
+        Ok(image_array)
     }
 
     fn update(&mut self) 
@@ -642,6 +642,8 @@ impl AppState
 
         Self
         {
+            document,
+
             event_loop,
             event_loop_proxy,
             canvas_window,
@@ -652,6 +654,8 @@ impl AppState
 
     async fn run(self)
     {
+        let document = self.document;
+
         let canvas_window = self.canvas_window;
         let event_loop    = self.event_loop;
 
@@ -721,16 +725,31 @@ impl AppState
                 {
                     AppEvent::SavePng {} =>
                     {
-                        match state.save_png()
+                        match state.get_png_data()
                         {
-                            Ok(_) =>
+                            Ok(image_array) =>
                             {
+                                let image_data = web_sys::ImageData::new_with_u8_clamped_array(Clamped(image_array.as_slice()), state.board_size.width).unwrap();
 
+                                let canvas = document.create_element("canvas").unwrap().dyn_into::<web_sys::HtmlCanvasElement>().unwrap();
+                                canvas.set_width(state.board_size.width);
+                                canvas.set_height(state.board_size.height);
+
+                                let canvas_context = canvas.get_context("2d").unwrap().unwrap().dyn_into::<web_sys::CanvasRenderingContext2d>().unwrap();
+                                canvas_context.put_image_data(&image_data, 0.0, 0.0);
+
+                                let link = document.create_element("a").unwrap().dyn_into::<web_sys::HtmlAnchorElement>().unwrap();
+                                link.set_target(&canvas.to_data_url_with_type("image/png").unwrap());
+                                link.set_download(&"LightsOutMatrix.png");
+                                link.click();
+
+                                link.remove();
+                                canvas.remove();
                             },
 
                             Err(message) =>
                             {
-                                web_sys::console::log_1(&format!("Error saving BDFG image: {}", message).into());
+                                web_sys::console::log_1(&format!("Error saving PNG image: {}", message).into());
                             }
                         }
                     }
