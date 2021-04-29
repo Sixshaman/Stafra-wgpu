@@ -8,6 +8,8 @@ set RUSTFLAGS=--cfg=web_sys_unstable_apis
 
 %VULKAN_SDK%/Bin/glslc ../src/shaders/clear_board/clear_4_corners.comp -o clear_4_corners.spv
 
+%VULKAN_SDK%/Bin/glslc ../src/shaders/next_step/next_step.comp -o next_step.spv
+
 %VULKAN_SDK%/Bin/glslc ../src/shaders/state_transform/initial_state_transform.comp -o initial_state_transform.spv
 %VULKAN_SDK%/Bin/glslc ../src/shaders/state_transform/final_state_transform.comp   -o final_state_transform.spv
 

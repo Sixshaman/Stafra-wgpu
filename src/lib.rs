@@ -38,8 +38,12 @@ struct StafraState
     clear_4_corners_pipeline:         wgpu::ComputePipeline,
     initial_state_transform_pipeline: wgpu::ComputePipeline,
     final_state_transform_pipeline:   wgpu::ComputePipeline,
+    //next_step_pipeline:               wgpu::ComputePipeline,
 
-    render_state_bind_group: wgpu::BindGroup,
+    render_state_bind_group:    wgpu::BindGroup,
+    clear_4_corners_bind_group: wgpu::BindGroup,
+    //next_step_bind_group_a:     wgpu::BindGroup,
+    //next_step_bind_group_b:     wgpu::BindGroup,
 
     #[allow(dead_code)]
     current_board:     wgpu::Texture,
@@ -62,9 +66,7 @@ struct AppState
 
 enum AppEvent
 {
-    SavePng
-    {
-    },
+    SavePng,
 }
 
 impl StafraState
@@ -110,6 +112,7 @@ impl StafraState
         let initial_state_transform_module = device.create_shader_module(&wgpu::include_spirv!("../static/initial_state_transform.spv"));
         let final_state_transform_module   = device.create_shader_module(&wgpu::include_spirv!("../static/final_state_transform.spv"));
 
+
         let render_state_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor
         {
             label: None,
@@ -142,41 +145,39 @@ impl StafraState
             ]
         });
 
+        let clear_4_corners_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor
+        {
+            label: None,
+            entries:
+            &[
+                wgpu::BindGroupLayoutEntry
+                {
+                    binding: 0,
+                    visibility: wgpu::ShaderStage::COMPUTE,
+                    ty:         wgpu::BindingType::StorageTexture
+                    {
+                        access:         wgpu::StorageTextureAccess::WriteOnly,
+                        format:         wgpu::TextureFormat::R32Uint,
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                    },
+                    count: None
+                }
+            ]
+        });
+
+
         let render_state_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor 
         {
             label: None,
             bind_group_layouts: 
-            &[
-                &render_state_bind_group_layout
-            ],
+            &[&render_state_bind_group_layout],
             push_constant_ranges: &[],
         });
 
         let clear_4_corners_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor 
         {
             label: None,
-            bind_group_layouts: 
-            &[
-                &device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor
-                {
-                    label: None,
-                    entries: 
-                    &[
-                        wgpu::BindGroupLayoutEntry
-                        {
-                            binding: 0,
-                            visibility: wgpu::ShaderStage::COMPUTE,
-                            ty:         wgpu::BindingType::StorageTexture
-                            {
-                                access:         wgpu::StorageTextureAccess::WriteOnly,
-                                format:         wgpu::TextureFormat::R32Uint,
-                                view_dimension: wgpu::TextureViewDimension::D2,
-                            },
-                            count: None
-                        }
-                    ]
-                })
-            ],
+            bind_group_layouts: &[&clear_4_corners_bind_group_layout],
             push_constant_ranges: &[]
         });
 
@@ -205,19 +206,7 @@ impl StafraState
 
                         wgpu::BindGroupLayoutEntry
                         {
-                            binding:    1,
-                            visibility: wgpu::ShaderStage::COMPUTE,
-                            ty:         wgpu::BindingType::Sampler
-                            {
-                                filtering:  false,
-                                comparison: false,
-                            },
-                            count: None
-                        },
-
-                        wgpu::BindGroupLayoutEntry
-                        {
-                            binding: 2,
+                            binding: 1,
                             visibility: wgpu::ShaderStage::COMPUTE,
                             ty:         wgpu::BindingType::StorageTexture
                             {
@@ -446,7 +435,21 @@ impl StafraState
                     resource: wgpu::BindingResource::Sampler(&render_state_sampler),
                 }
             ]
-        });        
+        });
+
+        let clear_4_corners_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor
+        {
+            label: None,
+            layout: &clear_4_corners_bind_group_layout,
+            entries:
+            &[
+                wgpu::BindGroupEntry
+                {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&current_board_view),
+                },
+            ]
+        });
 
         Self
         {
@@ -465,6 +468,7 @@ impl StafraState
             final_state_transform_pipeline,
 
             render_state_bind_group,
+            clear_4_corners_bind_group,
 
             current_board,
             next_board,
@@ -575,6 +579,23 @@ impl StafraState
         Ok(image_array)
     }
 
+    fn reset_board(&self)
+    {
+        let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor{label: None});
+        {
+            let mut reset_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {label: None});
+
+            let thread_groups_x = std::cmp::max((self.board_size.width + 1) / (2 * 32), 1u32);
+            let thread_groups_y = std::cmp::max((self.board_size.width + 1) / (2 * 32), 1u32);
+
+            reset_pass.set_pipeline(&self.clear_4_corners_pipeline);
+            reset_pass.set_bind_group(0, &self.clear_4_corners_bind_group, &[]);
+            reset_pass.dispatch(thread_groups_x, thread_groups_y, 1);
+        }
+
+        self.queue.submit(std::iter::once(encoder.finish()));
+    }
+
     fn update(&mut self) 
     {
 
@@ -659,6 +680,8 @@ impl AppState
         let event_loop    = self.event_loop;
 
         let mut state = StafraState::new(&canvas_window, BoardDimensions {width: 1023, height: 1023}).await;
+        state.reset_board();
+
         event_loop.run(move |event, _, control_flow| match event
         {
             Event::WindowEvent

@@ -4,25 +4,28 @@ layout(local_size_x = 32, local_size_y = 32) in;
 
 layout(set = 0, binding = 0, r32ui) uniform writeonly uimage2D outInitialBoard;
 
-uint buildPackedQuadValue(uvec4 values)
+uint buildPackedQuadValue(bvec4 inCornerQuadValues)
 {
-	//Packs a quad encoded as (values.x values.y
-    //                         values.z values.w)
-	//to a single uint32
-	return ((values.x & 0xffu) <<  0) | ((values.y & 0xffu) <<  8)
-	     | ((values.z & 0xffu) << 16) | ((values.w & 0xffu) << 24);
+	//Packs a uint32-encoded quad:
+	// (Bits 0-7)   (Bits 8-15)
+	// (Bits 16-23) (Bits 24-31)
+	//Since the board size is 2^n - 1, each corner 2x2 quad corresponds only to the top-left value of encoded quad
+	uint inCorner = uint(any(inCornerQuadValues));
+	return inCorner & 0xffu;
 }
 
 void main()
 {
-	ivec2 boardSize = imageSize(outInitialBoard) * 2;
+	ivec2 boardSize = imageSize(outInitialBoard) * 2 - 1; //The board size is always 2^n - 1
 
 	uvec2 topLeft     = uvec2(0,               0);
 	uvec2 topRight    = uvec2(boardSize.x - 1, 0);
 	uvec2 bottomLeft  = uvec2(0,               boardSize.y - 1);
 	uvec2 bottomRight = uvec2(boardSize.x - 1, boardSize.y - 1);
 
-	uvec4 invocationCoords = uvec4(gl_GlobalInvocationID.xy == topLeft,    gl_GlobalInvocationID.xy == topRight,
-	                               gl_GlobalInvocationID.xy == bottomLeft, gl_GlobalInvocationID.xy == bottomRight);
-    imageStore(outInitialBoard, ivec2(gl_GlobalInvocationID.xy), uvec4(buildPackedQuadValue(invocationCoords)));
+	//Each thread processes a single 2x2 quad
+	bvec4 inCornerQuadValues = bvec4(gl_GlobalInvocationID.xy == topLeft,    gl_GlobalInvocationID.xy == topRight,
+	                                 gl_GlobalInvocationID.xy == bottomLeft, gl_GlobalInvocationID.xy == bottomRight);
+
+    imageStore(outInitialBoard, ivec2(gl_GlobalInvocationID.xy), uvec4(buildPackedQuadValue(inCornerQuadValues)));
 }

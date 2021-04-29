@@ -8,29 +8,32 @@ layout(local_size_x = 32, local_size_y = 32) in;
 
 layout(set = 0, binding = 0) uniform texture2D initialStateTex;
 
-layout(set = 0, binding = 1) uniform sampler initialStateSampler; //Does nothing, only needed for textureGather
-
-layout(set = 0, binding = 2, r32ui) uniform writeonly uimage2D outInitialBoard;
+layout(set = 0, binding = 1, r32ui) uniform writeonly uimage2D outInitialBoard;
 
 uint buildPackedQuadValue(uvec4 values)
 {
-	//Packs a quad encoded as (values.x values.y
-	//                         values.z values.w)
-	//to a single uint32
+	//Packs a uint32-encoded quad:
+	// (Bits 0-7)   (Bits 8-15)
+	// (Bits 16-23) (Bits 24-31)
+	//From a bvec4-encoded quad:
+	// (values.x) (values.y)
+	// (values.z) (values.w)
 	return ((values.x & 0xffu) <<  0) | ((values.y & 0xffu) <<  8)
 	     | ((values.z & 0xffu) << 16) | ((values.w & 0xffu) << 24);
 }
 
 void main()
 {
-	vec3 lumCoeff = vec3(0.2126f, 0.7152f, 0.0722f);
+	vec4 lumCoeff = vec4(0.2126f, 0.7152f, 0.0722f, 0.0f);
 
 	//Packed 4 values
-	vec4 stateX = textureGather(sampler2D(initialStateTex, initialStateSampler), ivec2(gl_GlobalInvocationID.xy) * 2, 0);
-	vec4 stateY = textureGather(sampler2D(initialStateTex, initialStateSampler), ivec2(gl_GlobalInvocationID.xy) * 2, 0);
-	vec4 stateZ = textureGather(sampler2D(initialStateTex, initialStateSampler), ivec2(gl_GlobalInvocationID.xy) * 2, 0);
-	mat3x4 stateColorMat = mat3x4(stateX, stateY, stateZ);
+	vec4 topLeftQuad     = texelFetch(initialStateTex, ivec2(gl_GlobalInvocationID.xy) * 2 + ivec2(0, 0), 0);
+	vec4 topRightQuad    = texelFetch(initialStateTex, ivec2(gl_GlobalInvocationID.xy) * 2 + ivec2(1, 0), 0);
+	vec4 bottomLeftQuad  = texelFetch(initialStateTex, ivec2(gl_GlobalInvocationID.xy) * 2 + ivec2(0, 1), 0);
+	vec4 bottomRightQuad = texelFetch(initialStateTex, ivec2(gl_GlobalInvocationID.xy) * 2 + ivec2(1, 1), 0);
 
-	uvec4 stateColorResults = uvec4(greaterThan(stateColorMat * lumCoeff, vec4(0.15f)));
+	mat4x4 stateColorMat    = mat4x4(topLeftQuad, topRightQuad, bottomLeftQuad, bottomRightQuad);
+	uvec4 stateColorResults = uvec4(greaterThan(lumCoeff * stateColorMat, vec4(0.15f)));
+
     imageStore(outInitialBoard, ivec2(gl_GlobalInvocationID.xy), uvec4(buildPackedQuadValue(stateColorResults)));
 }

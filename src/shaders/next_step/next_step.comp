@@ -1,0 +1,55 @@
+#version 450
+
+#extension GL_EXT_samplerless_texture_functions: require
+
+layout(local_size_x = 32, local_size_y = 32) in;
+
+layout(set = 0, binding = 0) uniform utexture2D prevBoard;
+layout(set = 0, binding = 1) uniform utexture2D prevStability;
+
+layout(set = 0, binding = 2, r32ui) uniform writeonly uimage2D nextBoard;
+layout(set = 0, binding = 3, r32ui) uniform writeonly uimage2D nextStability;
+
+shared uint quadStates[(gl_WorkGroupSize.x + 2) * (gl_WorkGroupSize.y + 2)];
+
+void main()
+{
+    uint sharedQuadStateIndex = (gl_LocalInvocationID.y + 1) * (gl_WorkGroupSize.x + 2) + (gl_LocalInvocationID.x + 1);
+
+    uint thisQuadState = texelFetch(prevBoard, ivec2(gl_GlobalInvocationID.xy), 0).x;
+    quadStates[sharedQuadStateIndex] = thisQuadState;
+
+    if(gl_LocalInvocationID.x == 0)
+    {
+        uint sharedLeftQuadStateIndex = (gl_LocalInvocationID.y + 1) * (gl_WorkGroupSize.x + 2) + gl_LocalInvocationID.x;
+
+        uint leftQuadState = texelFetch(prevBoard, ivec2(gl_GlobalInvocationID.xy) + ivec2(-1, 0), 0).x;
+        quadStates[sharedLeftQuadStateIndex] = leftQuadState;
+    }
+
+    if(gl_LocalInvocationID.x == gl_WorkGroupSize.x - 1)
+    {
+        uint sharedRightQuadStateIndex = (gl_LocalInvocationID.y + 1) * (gl_WorkGroupSize.x + 2) + (gl_LocalInvocationID.x + 2);
+
+        uint rightQuadState = texelFetch(prevBoard, ivec2(gl_GlobalInvocationID.xy) + ivec2(1, 0), 0).x;
+        quadStates[sharedRightQuadStateIndex] = rightQuadState;
+    }
+
+    if(gl_LocalInvocationID.y == 0)
+    {
+        uint sharedTopQuadStateIndex = gl_LocalInvocationID.y * (gl_WorkGroupSize.x + 2) + (gl_LocalInvocationID.x + 1);
+
+        uint topQuadState = texelFetch(prevBoard, ivec2(gl_GlobalInvocationID.xy) + ivec2(0, -1), 0).x;
+        quadStates[sharedTopQuadStateIndex] = topQuadState;
+    }
+
+    if(gl_LocalInvocationID.y == gl_WorkGroupSize.y - 1)
+    {
+        uint sharedBottomQuadStateIndex = (gl_LocalInvocationID.y + 2) * (gl_WorkGroupSize.x + 2) + (gl_LocalInvocationID.x + 1);
+
+        uint bottomQuadState = texelFetch(prevBoard, ivec2(gl_GlobalInvocationID.xy) + ivec2(0, 1), 0).x;
+        quadStates[sharedBottomQuadStateIndex] = bottomQuadState;
+    }
+
+    //To be continued...
+}
