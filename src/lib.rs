@@ -38,18 +38,24 @@ struct StafraState
     clear_4_corners_pipeline:         wgpu::ComputePipeline,
     initial_state_transform_pipeline: wgpu::ComputePipeline,
     final_state_transform_pipeline:   wgpu::ComputePipeline,
-    //next_step_pipeline:               wgpu::ComputePipeline,
+    next_step_pipeline:               wgpu::ComputePipeline,
 
-    render_state_bind_group:    wgpu::BindGroup,
-    clear_4_corners_bind_group: wgpu::BindGroup,
-    //next_step_bind_group_a:     wgpu::BindGroup,
-    //next_step_bind_group_b:     wgpu::BindGroup,
+    render_state_bind_group:      wgpu::BindGroup,
+    clear_4_corners_bind_group:   wgpu::BindGroup,
+    next_step_bind_group_a:       wgpu::BindGroup,
+    next_step_bind_group_b:       wgpu::BindGroup,
+    final_transform_bind_group_a: wgpu::BindGroup,
+    final_transform_bind_group_b: wgpu::BindGroup,
 
     #[allow(dead_code)]
     current_board:     wgpu::Texture,
+    #[allow(dead_code)]
     next_board:        wgpu::Texture,
+    #[allow(dead_code)]
     current_stability: wgpu::Texture,
+    #[allow(dead_code)]
     next_stability:    wgpu::Texture,
+    #[allow(dead_code)]
     final_state:       wgpu::Texture
 }
 
@@ -109,6 +115,8 @@ impl StafraState
 
         let clear_4_corners_module = device.create_shader_module(&wgpu::include_spirv!("../static/clear_4_corners.spv"));
 
+        let next_step_module = device.create_shader_module(&wgpu::include_spirv!("../static/next_step.spv"));
+
         let initial_state_transform_module = device.create_shader_module(&wgpu::include_spirv!("../static/initial_state_transform.spv"));
         let final_state_transform_module   = device.create_shader_module(&wgpu::include_spirv!("../static/final_state_transform.spv"));
 
@@ -165,12 +173,136 @@ impl StafraState
             ]
         });
 
+        let initial_state_transform_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor
+        {
+            label: None,
+            entries:
+            &[
+                wgpu::BindGroupLayoutEntry
+                {
+                    binding: 0,
+                    visibility: wgpu::ShaderStage::COMPUTE,
+                    ty:         wgpu::BindingType::Texture
+                    {
+                        sample_type:    wgpu::TextureSampleType::Float {filterable: true},
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled:   false,
+                    },
+                    count: None
+                },
+
+                wgpu::BindGroupLayoutEntry
+                {
+                    binding: 1,
+                    visibility: wgpu::ShaderStage::COMPUTE,
+                    ty:         wgpu::BindingType::StorageTexture
+                    {
+                        access:         wgpu::StorageTextureAccess::WriteOnly,
+                        format:         wgpu::TextureFormat::R32Uint,
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                    },
+                    count: None
+                }
+            ]
+        });
+
+        let final_state_transform_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor
+        {
+            label: None,
+            entries:
+            &[
+                wgpu::BindGroupLayoutEntry
+                {
+                    binding: 0,
+                    visibility: wgpu::ShaderStage::COMPUTE,
+                    ty:         wgpu::BindingType::Texture
+                    {
+                        sample_type:    wgpu::TextureSampleType::Uint,
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled:   false,
+                    },
+                    count: None
+                },
+
+                wgpu::BindGroupLayoutEntry
+                {
+                    binding: 1,
+                    visibility: wgpu::ShaderStage::COMPUTE,
+                    ty:         wgpu::BindingType::StorageTexture
+                    {
+                        access:         wgpu::StorageTextureAccess::WriteOnly,
+                        format:         wgpu::TextureFormat::R32Float,
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                    },
+                    count: None
+                }
+            ]
+        });
+
+        let next_step_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor
+        {
+            label: None,
+            entries:
+            &[
+                wgpu::BindGroupLayoutEntry
+                {
+                    binding: 0,
+                    visibility: wgpu::ShaderStage::COMPUTE,
+                    ty:         wgpu::BindingType::Texture
+                    {
+                        sample_type:    wgpu::TextureSampleType::Uint,
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled:   false,
+                    },
+                    count: None
+                },
+
+                wgpu::BindGroupLayoutEntry
+                {
+                    binding: 1,
+                    visibility: wgpu::ShaderStage::COMPUTE,
+                    ty:         wgpu::BindingType::Texture
+                    {
+                        sample_type:    wgpu::TextureSampleType::Uint,
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled:   false,
+                    },
+                    count: None
+                },
+
+                wgpu::BindGroupLayoutEntry
+                {
+                    binding: 2,
+                    visibility: wgpu::ShaderStage::COMPUTE,
+                    ty:         wgpu::BindingType::StorageTexture
+                    {
+                        access:         wgpu::StorageTextureAccess::WriteOnly,
+                        format:         wgpu::TextureFormat::R32Uint,
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                    },
+                    count: None
+                },
+
+                wgpu::BindGroupLayoutEntry
+                {
+                    binding: 3,
+                    visibility: wgpu::ShaderStage::COMPUTE,
+                    ty:         wgpu::BindingType::StorageTexture
+                    {
+                        access:         wgpu::StorageTextureAccess::WriteOnly,
+                        format:         wgpu::TextureFormat::R32Uint,
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                    },
+                    count: None
+                },
+            ]
+        });
+
 
         let render_state_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor 
         {
             label: None,
-            bind_group_layouts: 
-            &[&render_state_bind_group_layout],
+            bind_group_layouts: &[&render_state_bind_group_layout],
             push_constant_ranges: &[],
         });
 
@@ -184,84 +316,24 @@ impl StafraState
         let initial_state_transform_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor 
         {
             label: None,
-            bind_group_layouts: 
-            &[
-                &device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor
-                {
-                    label: None,
-                    entries: 
-                    &[
-                        wgpu::BindGroupLayoutEntry
-                        {
-                            binding: 0,
-                            visibility: wgpu::ShaderStage::COMPUTE,
-                            ty:         wgpu::BindingType::Texture
-                            {
-                                sample_type:    wgpu::TextureSampleType::Float {filterable: true},
-                                view_dimension: wgpu::TextureViewDimension::D2,
-                                multisampled:   false,
-                            },
-                            count: None
-                        },
-
-                        wgpu::BindGroupLayoutEntry
-                        {
-                            binding: 1,
-                            visibility: wgpu::ShaderStage::COMPUTE,
-                            ty:         wgpu::BindingType::StorageTexture
-                            {
-                                access:         wgpu::StorageTextureAccess::WriteOnly,
-                                format:         wgpu::TextureFormat::R32Uint,
-                                view_dimension: wgpu::TextureViewDimension::D2,
-                            },
-                            count: None
-                        }
-                    ]
-                })
-            ],
+            bind_group_layouts: &[&initial_state_transform_bind_group_layout],
             push_constant_ranges: &[],
         });
 
         let final_state_transform_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor 
         {
             label: None,
-            bind_group_layouts: 
-            &[
-                &device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor
-                {
-                    label: None,
-                    entries: 
-                    &[
-                        wgpu::BindGroupLayoutEntry
-                        {
-                            binding: 0,
-                            visibility: wgpu::ShaderStage::COMPUTE,
-                            ty:         wgpu::BindingType::Texture
-                            {
-                                sample_type:    wgpu::TextureSampleType::Uint,
-                                view_dimension: wgpu::TextureViewDimension::D2,
-                                multisampled:   false,
-                            },
-                            count: None
-                        },
-
-                        wgpu::BindGroupLayoutEntry
-                        {
-                            binding: 1,
-                            visibility: wgpu::ShaderStage::COMPUTE,
-                            ty:         wgpu::BindingType::StorageTexture
-                            {
-                                access:         wgpu::StorageTextureAccess::WriteOnly,
-                                format:         wgpu::TextureFormat::R32Float,
-                                view_dimension: wgpu::TextureViewDimension::D2,
-                            },
-                            count: None
-                        }
-                    ]
-                })
-            ],
+            bind_group_layouts: &[&final_state_transform_bind_group_layout],
             push_constant_ranges: &[],
         });
+
+        let next_step_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor
+        {
+            label: None,
+            bind_group_layouts: &[&next_step_bind_group_layout],
+            push_constant_ranges: &[],
+        });
+
 
         let render_state_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor 
         {
@@ -327,6 +399,14 @@ impl StafraState
             label:       None,
             layout:      Some(&final_state_transform_pipeline_layout),
             module:      &final_state_transform_module,
+            entry_point: "main"
+        });
+
+        let next_step_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor
+        {
+            label:       None,
+            layout:      Some(&next_step_pipeline_layout),
+            module:      &next_step_module,
             entry_point: "main"
         });
 
@@ -451,6 +531,111 @@ impl StafraState
             ]
         });
 
+        let next_step_bind_group_a = device.create_bind_group(&wgpu::BindGroupDescriptor
+        {
+            label: None,
+            layout: &next_step_bind_group_layout,
+            entries:
+            &[
+                wgpu::BindGroupEntry
+                {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&current_board_view),
+                },
+
+                wgpu::BindGroupEntry
+                {
+                    binding: 1,
+                    resource: wgpu::BindingResource::TextureView(&next_board_view),
+                },
+
+                wgpu::BindGroupEntry
+                {
+                    binding: 2,
+                    resource: wgpu::BindingResource::TextureView(&current_stability_view),
+                },
+
+                wgpu::BindGroupEntry
+                {
+                    binding: 3,
+                    resource: wgpu::BindingResource::TextureView(&next_stability_view),
+                },
+            ]
+        });
+
+        let next_step_bind_group_b = device.create_bind_group(&wgpu::BindGroupDescriptor
+        {
+            label: None,
+            layout: &next_step_bind_group_layout,
+            entries:
+            &[
+                wgpu::BindGroupEntry
+                {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&next_board_view),
+                },
+
+                wgpu::BindGroupEntry
+                {
+                    binding: 1,
+                    resource: wgpu::BindingResource::TextureView(&current_board_view),
+                },
+
+                wgpu::BindGroupEntry
+                {
+                    binding: 2,
+                    resource: wgpu::BindingResource::TextureView(&next_stability_view),
+                },
+
+                wgpu::BindGroupEntry
+                {
+                    binding: 3,
+                    resource: wgpu::BindingResource::TextureView(&current_stability_view),
+                },
+            ]
+        });
+
+        let final_transform_bind_group_a = device.create_bind_group(&wgpu::BindGroupDescriptor
+        {
+            label: None,
+            layout: &final_state_transform_bind_group_layout,
+            entries:
+            &[
+                wgpu::BindGroupEntry
+                {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&next_stability_view),
+                },
+
+                wgpu::BindGroupEntry
+                {
+                    binding: 1,
+                    resource: wgpu::BindingResource::TextureView(&final_state_view),
+                },
+            ]
+        });
+
+        let final_transform_bind_group_b = device.create_bind_group(&wgpu::BindGroupDescriptor
+        {
+            label: None,
+            layout: &final_state_transform_bind_group_layout,
+            entries:
+            &[
+                wgpu::BindGroupEntry
+                {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&current_stability_view),
+                },
+
+                wgpu::BindGroupEntry
+                {
+                    binding: 1,
+                    resource: wgpu::BindingResource::TextureView(&final_state_view),
+                },
+            ]
+        });
+
+
         Self
         {
             surface,
@@ -466,9 +651,14 @@ impl StafraState
             clear_4_corners_pipeline,
             initial_state_transform_pipeline,
             final_state_transform_pipeline,
+            next_step_pipeline,
 
             render_state_bind_group,
             clear_4_corners_bind_group,
+            next_step_bind_group_a,
+            next_step_bind_group_b,
+            final_transform_bind_group_a,
+            final_transform_bind_group_b,
 
             current_board,
             next_board,
@@ -598,7 +788,31 @@ impl StafraState
 
     fn update(&mut self) 
     {
+        let thread_groups_x = std::cmp::max((self.board_size.width + 1) / (2 * 32), 1u32);
+        let thread_groups_y = std::cmp::max((self.board_size.width + 1) / (2 * 32), 1u32);
 
+        let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor{label: None});
+
+        {
+            let mut reset_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {label: None});
+
+            reset_pass.set_pipeline(&self.next_step_pipeline);
+            reset_pass.set_bind_group(0, &self.next_step_bind_group_a, &[]);
+            reset_pass.dispatch(thread_groups_x, thread_groups_y, 1);
+        }
+
+        {
+            let mut final_transform_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {label: None});
+
+            final_transform_pass.set_pipeline(&self.final_state_transform_pipeline);
+            final_transform_pass.set_bind_group(0, &self.final_transform_bind_group_a, &[]);
+            final_transform_pass.dispatch(thread_groups_x, thread_groups_y, 1);
+        }
+
+        self.queue.submit(std::iter::once(encoder.finish()));
+
+        std::mem::swap(&mut self.next_step_bind_group_a,       &mut self.next_step_bind_group_b);
+        std::mem::swap(&mut self.final_transform_bind_group_a, &mut self.final_transform_bind_group_b);
     }
 
     fn render(&mut self) -> Result<(), wgpu::SwapChainError>
@@ -711,7 +925,7 @@ impl AppState
 
             Event::RedrawRequested(_) =>
             {
-                //state.update();
+                state.update();
                 match state.render()
                 {
                     Ok(_) =>
@@ -786,6 +1000,6 @@ impl AppState
 #[wasm_bindgen(start)]
 pub fn entry_point()
 {
-    let mut app_state = AppState::new();
+    let app_state = AppState::new();
     wasm_bindgen_futures::spawn_local(app_state.run());
 }

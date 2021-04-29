@@ -12,5 +12,5 @@ void main()
 	float boardVal       = texture(sampler2D(boardTex, boardSampler), frag_texcoord).x;
 	vec4  stabilityColor = vec4(1.0f, 0.0f, 1.0f, 1.0f);
 
-	out_color = stabilityColor * boardVal;
+	out_color = vec4(vec3(boardVal), 1.0f) * stabilityColor;
 }

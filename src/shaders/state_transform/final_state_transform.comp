@@ -21,7 +21,7 @@ void main()
 	uint  finalStability     = texelFetch(finalBoard, ivec2(gl_GlobalInvocationID.xy), 0).x;
 	uvec4 finalStabilityQuad = unpackQuadValue(finalStability);
 
-	finalStabilityQuad = finalStabilityQuad * uvec4(finalStability < 2); //Zero out all values that have final stability >= 2
+	finalStabilityQuad = finalStabilityQuad * uvec4(lessThan(finalStabilityQuad, uvec4(2))); //Zero out all values that have final stability >= 2
 
     imageStore(outTex, ivec2(gl_GlobalInvocationID.xy) * 2 + ivec2(0, 0), vec4(finalStabilityQuad.x));
 	imageStore(outTex, ivec2(gl_GlobalInvocationID.xy) * 2 + ivec2(1, 0), vec4(finalStabilityQuad.y));

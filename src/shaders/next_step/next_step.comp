@@ -14,42 +14,68 @@ shared uint quadStates[(gl_WorkGroupSize.x + 2) * (gl_WorkGroupSize.y + 2)];
 
 void main()
 {
-    uint sharedQuadStateIndex = (gl_LocalInvocationID.y + 1) * (gl_WorkGroupSize.x + 2) + (gl_LocalInvocationID.x + 1);
+    uint sharedQuadStateIndex       = (gl_LocalInvocationID.y + 1) * (gl_WorkGroupSize.x + 2) + (gl_LocalInvocationID.x + 1);
+    uint sharedLeftQuadStateIndex   = (gl_LocalInvocationID.y + 1) * (gl_WorkGroupSize.x + 2) +  gl_LocalInvocationID.x;
+    uint sharedRightQuadStateIndex  = (gl_LocalInvocationID.y + 1) * (gl_WorkGroupSize.x + 2) + (gl_LocalInvocationID.x + 2);
+    uint sharedTopQuadStateIndex    =  gl_LocalInvocationID.y      * (gl_WorkGroupSize.x + 2) + (gl_LocalInvocationID.x + 1);
+    uint sharedBottomQuadStateIndex = (gl_LocalInvocationID.y + 2) * (gl_WorkGroupSize.x + 2) + (gl_LocalInvocationID.x + 1);
 
     uint thisQuadState = texelFetch(prevBoard, ivec2(gl_GlobalInvocationID.xy), 0).x;
     quadStates[sharedQuadStateIndex] = thisQuadState;
 
     if(gl_LocalInvocationID.x == 0)
     {
-        uint sharedLeftQuadStateIndex = (gl_LocalInvocationID.y + 1) * (gl_WorkGroupSize.x + 2) + gl_LocalInvocationID.x;
-
         uint leftQuadState = texelFetch(prevBoard, ivec2(gl_GlobalInvocationID.xy) + ivec2(-1, 0), 0).x;
         quadStates[sharedLeftQuadStateIndex] = leftQuadState;
     }
 
     if(gl_LocalInvocationID.x == gl_WorkGroupSize.x - 1)
     {
-        uint sharedRightQuadStateIndex = (gl_LocalInvocationID.y + 1) * (gl_WorkGroupSize.x + 2) + (gl_LocalInvocationID.x + 2);
-
         uint rightQuadState = texelFetch(prevBoard, ivec2(gl_GlobalInvocationID.xy) + ivec2(1, 0), 0).x;
         quadStates[sharedRightQuadStateIndex] = rightQuadState;
     }
 
     if(gl_LocalInvocationID.y == 0)
     {
-        uint sharedTopQuadStateIndex = gl_LocalInvocationID.y * (gl_WorkGroupSize.x + 2) + (gl_LocalInvocationID.x + 1);
-
         uint topQuadState = texelFetch(prevBoard, ivec2(gl_GlobalInvocationID.xy) + ivec2(0, -1), 0).x;
         quadStates[sharedTopQuadStateIndex] = topQuadState;
     }
 
     if(gl_LocalInvocationID.y == gl_WorkGroupSize.y - 1)
     {
-        uint sharedBottomQuadStateIndex = (gl_LocalInvocationID.y + 2) * (gl_WorkGroupSize.x + 2) + (gl_LocalInvocationID.x + 1);
-
         uint bottomQuadState = texelFetch(prevBoard, ivec2(gl_GlobalInvocationID.xy) + ivec2(0, 1), 0).x;
         quadStates[sharedBottomQuadStateIndex] = bottomQuadState;
     }
 
-    //To be continued...
+    barrier();
+    memoryBarrierShared();
+
+    //Masks for halves of 2x2 quad, encoded as
+    // (Bits 0-7)   (Bits 8-15)
+    // (Bits 16-23) (Bits 24-31)
+    const uint leftQuadMask   = 0x00ff00ff;
+    const uint rightQuadMask  = 0xff00ff00;
+    const uint topQuadMask    = 0x0000ffff;
+    const uint bottomQuadMask = 0xffff0000;
+
+    uint thisQuad   = quadStates[sharedQuadStateIndex];
+    uint leftQuad   = quadStates[sharedLeftQuadStateIndex];
+    uint rightQuad  = quadStates[sharedRightQuadStateIndex];
+    uint topQuad    = quadStates[sharedTopQuadStateIndex];
+    uint bottomQuad = quadStates[sharedBottomQuadStateIndex];
+
+    uint quadThisState   = thisQuad;
+    uint quadLeftState   = ((leftQuad   & rightQuadMask)  >>  8) | ((thisQuad & leftQuadMask)   <<  8);
+    uint quadRightState  = ((rightQuad  & leftQuadMask)   <<  8) | ((thisQuad & rightQuadMask)  >>  8);
+    uint quadTopState    = ((topQuad    & bottomQuadMask) >> 16) | ((thisQuad & topQuadMask)    << 16);
+    uint quadBottomState = ((bottomQuad & topQuadMask)    << 16) | ((thisQuad & bottomQuadMask) >> 16);
+
+    uint modulo2Mask   = 0x01010101;
+    uint quadNextState = (thisQuad + quadLeftState + quadRightState + quadTopState + quadBottomState) & modulo2Mask;
+
+    uint prevStabilityState = texelFetch(prevStability, ivec2(gl_GlobalInvocationID.xy), 0).x;
+    uint nextStabilityState = (prevStabilityState & ~(quadNextState ^ quadThisState));
+
+    imageStore(nextBoard,     ivec2(gl_GlobalInvocationID.xy), uvec4(quadNextState));
+    imageStore(nextStability, ivec2(gl_GlobalInvocationID.xy), uvec4(nextStabilityState));
 }

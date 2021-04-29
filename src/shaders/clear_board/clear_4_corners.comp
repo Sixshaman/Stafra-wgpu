@@ -11,12 +11,12 @@ uint buildPackedQuadValue(bvec4 inCornerQuadValues)
 	// (Bits 16-23) (Bits 24-31)
 	//Since the board size is 2^n - 1, each corner 2x2 quad corresponds only to the top-left value of encoded quad
 	uint inCorner = uint(any(inCornerQuadValues));
-	return inCorner & 0xffu;
+	return inCorner;
 }
 
 void main()
 {
-	ivec2 boardSize = imageSize(outInitialBoard) * 2 - 1; //The board size is always 2^n - 1
+	ivec2 boardSize = imageSize(outInitialBoard);
 
 	uvec2 topLeft     = uvec2(0,               0);
 	uvec2 topRight    = uvec2(boardSize.x - 1, 0);
