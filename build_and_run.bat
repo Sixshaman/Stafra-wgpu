@@ -2,7 +2,8 @@ if not exist static mkdir static
 
 cd static
 
-echo F|xcopy /Y /F "../src/index.html" "./index.html"
+echo F|xcopy /Y /F "../src/stafra.html" "./stafra.html"
+echo F|xcopy /Y /F "../src/stafra.css" "./stafra.css"
 
 set RUSTFLAGS=--cfg=web_sys_unstable_apis
 
@@ -17,7 +18,7 @@ set RUSTFLAGS=--cfg=web_sys_unstable_apis
 %VULKAN_SDK%/Bin/glslc ../src/shaders/render/render_state.frag -o render_state_fs.spv
 
 wasm-pack build --release --target web --out-name Stafra --out-dir static -- --features winit/web-sys
-miniserve --index index.html
+miniserve --index stafra.html
 
 set RUSTFLAGS=
 cd ..

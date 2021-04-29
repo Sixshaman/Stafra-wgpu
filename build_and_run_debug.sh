@@ -5,7 +5,8 @@ mkdir -p static
 
 cd static
 
-cp ../src/index.html index.html
+cp ../src/stafra.html stafra.html
+cp ../src/stafra.css stafra.css
 
 ${VULKAN_SDK}/x86_64/bin/glslc ../src/shaders/clear_board/clear_4_corners.comp -o clear_4_corners.spv 
 
@@ -18,4 +19,4 @@ ${VULKAN_SDK}/x86_64/bin/glslc ../src/shaders/render/render_state.vert -o render
 ${VULKAN_SDK}/x86_64/bin/glslc ../src/shaders/render/render_state.frag -o render_state_fs.spv
 
 RUSTFLAGS=--cfg=web_sys_unstable_apis wasm-pack build --release --target web --out-name Stafra --out-dir static -- --features winit/web-sys
-miniserve --index index.html
+miniserve --index stafra.html

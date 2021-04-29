@@ -546,13 +546,13 @@ impl StafraState
                 wgpu::BindGroupEntry
                 {
                     binding: 1,
-                    resource: wgpu::BindingResource::TextureView(&next_board_view),
+                    resource: wgpu::BindingResource::TextureView(&current_stability_view),
                 },
 
                 wgpu::BindGroupEntry
                 {
                     binding: 2,
-                    resource: wgpu::BindingResource::TextureView(&current_stability_view),
+                    resource: wgpu::BindingResource::TextureView(&next_board_view),
                 },
 
                 wgpu::BindGroupEntry
@@ -578,13 +578,13 @@ impl StafraState
                 wgpu::BindGroupEntry
                 {
                     binding: 1,
-                    resource: wgpu::BindingResource::TextureView(&current_board_view),
+                    resource: wgpu::BindingResource::TextureView(&next_stability_view),
                 },
 
                 wgpu::BindGroupEntry
                 {
                     binding: 2,
-                    resource: wgpu::BindingResource::TextureView(&next_stability_view),
+                    resource: wgpu::BindingResource::TextureView(&current_board_view),
                 },
 
                 wgpu::BindGroupEntry
