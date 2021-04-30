@@ -35,5 +35,17 @@ void main()
 	mat4x4 stateColorMat    = mat4x4(topLeftQuad, topRightQuad, bottomLeftQuad, bottomRightQuad);
 	uvec4 stateColorResults = uvec4(greaterThan(lumCoeff * stateColorMat, vec4(0.15f)));
 
-    imageStore(outInitialBoard, ivec2(gl_GlobalInvocationID.xy), uvec4(buildPackedQuadValue(stateColorResults)));
+	uint packedQuad = buildPackedQuadValue(stateColorResults);
+
+	//Masks for halves of 2x2 quad, encoded as
+	// (Bits 0-7)   (Bits 8-15)
+	// (Bits 16-23) (Bits 24-31)
+	const uint rightQuadMask  = 0xff00ff00;
+	const uint bottomQuadMask = 0xffff0000;
+
+	uvec2 rightBottomCoord = imageSize(outInitialBoard) + ivec2(-1, -1); //Board size is always 2^n - 1. Need to mask out the bottom and right edge
+	bvec2 onRightBottom    = equal(gl_GlobalInvocationID.xy, rightBottomCoord);
+	uvec2 rightBottomMask  = uvec2(rightQuadMask, bottomQuadMask) * uvec2(onRightBottom);
+
+    imageStore(outInitialBoard, ivec2(gl_GlobalInvocationID.xy), uvec4(packedQuad & ~(rightBottomMask.x | rightBottomMask.y)));
 }

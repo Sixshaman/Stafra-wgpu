@@ -38,6 +38,7 @@ struct StafraState
     clear_4_corners_pipeline:         wgpu::ComputePipeline,
     initial_state_transform_pipeline: wgpu::ComputePipeline,
     final_state_transform_pipeline:   wgpu::ComputePipeline,
+    clear_stability_pipeline:         wgpu::ComputePipeline,
     next_step_pipeline:               wgpu::ComputePipeline,
 
     render_state_bind_group:      wgpu::BindGroup,
@@ -46,6 +47,7 @@ struct StafraState
     next_step_bind_group_b:       wgpu::BindGroup,
     final_transform_bind_group_a: wgpu::BindGroup,
     final_transform_bind_group_b: wgpu::BindGroup,
+    clear_stability_bind_group:   wgpu::BindGroup,
 
     #[allow(dead_code)]
     current_board:     wgpu::Texture,
@@ -115,10 +117,11 @@ impl StafraState
 
         let clear_4_corners_module = device.create_shader_module(&wgpu::include_spirv!("../static/clear_4_corners.spv"));
 
-        let next_step_module = device.create_shader_module(&wgpu::include_spirv!("../static/next_step.spv"));
-
         let initial_state_transform_module = device.create_shader_module(&wgpu::include_spirv!("../static/initial_state_transform.spv"));
         let final_state_transform_module   = device.create_shader_module(&wgpu::include_spirv!("../static/final_state_transform.spv"));
+        let clear_stability_module         = device.create_shader_module(&wgpu::include_spirv!("../static/clear_stability.spv"));
+
+        let next_step_module = device.create_shader_module(&wgpu::include_spirv!("../static/next_step.spv"));
 
 
         let render_state_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor
@@ -239,6 +242,26 @@ impl StafraState
             ]
         });
 
+        let clear_stability_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor
+        {
+            label: None,
+            entries:
+            &[
+                wgpu::BindGroupLayoutEntry
+                {
+                    binding: 0,
+                    visibility: wgpu::ShaderStage::COMPUTE,
+                    ty:         wgpu::BindingType::StorageTexture
+                    {
+                        access:         wgpu::StorageTextureAccess::WriteOnly,
+                        format:         wgpu::TextureFormat::R32Uint,
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                    },
+                    count: None
+                }
+            ]
+        });
+
         let next_step_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor
         {
             label: None,
@@ -327,6 +350,13 @@ impl StafraState
             push_constant_ranges: &[],
         });
 
+        let clear_stability_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor
+        {
+            label: None,
+            bind_group_layouts: &[&clear_stability_bind_group_layout],
+            push_constant_ranges: &[],
+        });
+
         let next_step_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor
         {
             label: None,
@@ -399,6 +429,14 @@ impl StafraState
             label:       None,
             layout:      Some(&final_state_transform_pipeline_layout),
             module:      &final_state_transform_module,
+            entry_point: "main"
+        });
+
+        let clear_stability_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor
+        {
+            label:       None,
+            layout:      Some(&clear_stability_pipeline_layout),
+            module:      &clear_stability_module,
             entry_point: "main"
         });
 
@@ -635,6 +673,20 @@ impl StafraState
             ]
         });
 
+        let clear_stability_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor
+        {
+            label: None,
+            layout: &clear_stability_bind_group_layout,
+            entries:
+            &[
+                wgpu::BindGroupEntry
+                {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&current_stability_view),
+                },
+            ]
+        });
+
 
         Self
         {
@@ -652,6 +704,7 @@ impl StafraState
             initial_state_transform_pipeline,
             final_state_transform_pipeline,
             next_step_pipeline,
+            clear_stability_pipeline,
 
             render_state_bind_group,
             clear_4_corners_bind_group,
@@ -659,6 +712,7 @@ impl StafraState
             next_step_bind_group_b,
             final_transform_bind_group_a,
             final_transform_bind_group_b,
+            clear_stability_bind_group,
 
             current_board,
             next_board,
@@ -733,7 +787,7 @@ impl StafraState
         let start_time  = performance.now();
         loop
         {
-            //Busy wait because asyncs in winit don't work at the time of writing this code
+            //Busy wait because asyncs in winit don't work
             let pinned_future = Pin::new(&mut buffer_map_future);
             match Future::poll(pinned_future, &mut context)
             {
@@ -772,15 +826,24 @@ impl StafraState
     fn reset_board(&self)
     {
         let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor{label: None});
+
+        let thread_groups_x = std::cmp::max((self.board_size.width + 1) / (2 * 32), 1u32);
+        let thread_groups_y = std::cmp::max((self.board_size.width + 1) / (2 * 32), 1u32);
+
         {
             let mut reset_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {label: None});
-
-            let thread_groups_x = std::cmp::max((self.board_size.width + 1) / (2 * 32), 1u32);
-            let thread_groups_y = std::cmp::max((self.board_size.width + 1) / (2 * 32), 1u32);
 
             reset_pass.set_pipeline(&self.clear_4_corners_pipeline);
             reset_pass.set_bind_group(0, &self.clear_4_corners_bind_group, &[]);
             reset_pass.dispatch(thread_groups_x, thread_groups_y, 1);
+        }
+
+        {
+            let mut clear_stability_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {label: None});
+
+            clear_stability_pass.set_pipeline(&self.clear_stability_pipeline);
+            clear_stability_pass.set_bind_group(0, &self.clear_stability_bind_group, &[]);
+            clear_stability_pass.dispatch(thread_groups_x, thread_groups_y, 1);
         }
 
         self.queue.submit(std::iter::once(encoder.finish()));
@@ -893,7 +956,7 @@ impl AppState
         let canvas_window = self.canvas_window;
         let event_loop    = self.event_loop;
 
-        let mut state = StafraState::new(&canvas_window, BoardDimensions {width: 63, height: 63}).await;
+        let mut state = StafraState::new(&canvas_window, BoardDimensions {width: 4095, height: 4095}).await;
         state.reset_board();
 
         event_loop.run(move |event, _, control_flow| match event

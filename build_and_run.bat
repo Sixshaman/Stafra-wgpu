@@ -13,6 +13,7 @@ set RUSTFLAGS=--cfg=web_sys_unstable_apis
 
 %VULKAN_SDK%/Bin/glslc ../src/shaders/state_transform/initial_state_transform.comp -o initial_state_transform.spv
 %VULKAN_SDK%/Bin/glslc ../src/shaders/state_transform/final_state_transform.comp   -o final_state_transform.spv
+%VULKAN_SDK%/Bin/glslc ../src/shaders/state_transform/clear_stability.comp         -o clear_stability.spv
 
 %VULKAN_SDK%/Bin/glslc ../src/shaders/render/render_state.vert -o render_state_vs.spv
 %VULKAN_SDK%/Bin/glslc ../src/shaders/render/render_state.frag -o render_state_fs.spv

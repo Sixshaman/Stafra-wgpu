@@ -1,0 +1,38 @@
+#version 450
+
+#extension GL_EXT_samplerless_texture_functions: require
+
+//Transfroms the initial state texture into the stability buffer data
+
+layout(local_size_x = 32, local_size_y = 32) in;
+
+layout(set = 0, binding = 0, r32ui) uniform writeonly uimage2D outInitialStability;
+
+uint buildPackedQuadValue(uvec4 values)
+{
+    //Packs a uint32-encoded quad:
+    // (Bits 0-7)   (Bits 8-15)
+    // (Bits 16-23) (Bits 24-31)
+    //From a bvec4-encoded quad:
+    // (values.x) (values.y)
+    // (values.z) (values.w)
+    return ((values.x & 0xffu) <<  0) | ((values.y & 0xffu) <<  8)
+         | ((values.z & 0xffu) << 16) | ((values.w & 0xffu) << 24);
+}
+
+void main()
+{
+    uint packedQuad = buildPackedQuadValue(uvec4(1u));
+
+    //Masks for halves of 2x2 quad, encoded as
+    // (Bits 0-7)   (Bits 8-15)
+    // (Bits 16-23) (Bits 24-31)
+    const uint rightQuadMask  = 0xff00ff00;
+    const uint bottomQuadMask = 0xffff0000;
+
+    uvec2 rightBottomCoord = imageSize(outInitialStability) + ivec2(-1, -1); //Board size is always 2^n - 1. Need to mask out the bottom and right edge
+    bvec2 onRightBottom    = equal(gl_GlobalInvocationID.xy, rightBottomCoord);
+    uvec2 rightBottomMask  = uvec2(rightQuadMask, bottomQuadMask) * uvec2(onRightBottom);
+
+    imageStore(outInitialStability, ivec2(gl_GlobalInvocationID.xy), uvec4(packedQuad & ~(rightBottomMask.x | rightBottomMask.y)));
+}
