@@ -8,7 +8,6 @@ echo F|xcopy /Y /F "../src/stafra.html" "./stafra.html"
 echo F|xcopy /Y /F "../src/stafra.css" "./stafra.css"
 
 set RUSTFLAGS=--cfg=web_sys_unstable_apis
-set RUST_LOG=info
 
 %VULKAN_SDK%/Bin/glslc ../src/shaders/clear_board/clear_4_corners.comp -o ../target/shaders/clear_4_corners.spv
 
@@ -23,9 +22,8 @@ set RUST_LOG=info
 
 %VULKAN_SDK%/Bin/glslc ../src/shaders/mip/final_state_generate_next_mip.comp -o ../target/shaders/final_state_generate_next_mip.spv
 
-wasm-pack build --target web --out-name Stafra --out-dir static -- --features winit/web-sys
+wasm-pack build --release --target web --out-name Stafra --out-dir static -- --features winit/web-sys
 miniserve --index stafra.html
 
 set RUSTFLAGS=
-set RUST_LOG=
 cd ..
