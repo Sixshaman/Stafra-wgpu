@@ -1,6 +1,9 @@
-if not exist static         mkdir static
-if not exist target         mkdir target
-if not exist target/shaders mkdir target/shaders
+if not exist static mkdir static
+if not exist target mkdir target
+
+cd target
+if not exist shaders mkdir shaders
+cd ..
 
 cd static
 

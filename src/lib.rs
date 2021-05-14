@@ -538,7 +538,7 @@ impl StafraState
             dimension:         Some(wgpu::TextureViewDimension::D2),
             aspect:            wgpu::TextureAspect::All,
             base_mip_level:    0,
-            mip_level_count:   None,
+            mip_level_count:   NonZeroU32::new(final_state_mips),
             base_array_layer:  0,
             array_layer_count: None
         };
@@ -552,7 +552,7 @@ impl StafraState
         let mut final_state_mip_views = Vec::with_capacity(final_state_mips as usize);
         for i in 0..final_state_mips
         {
-            let final_state_mip_view_descriptor = wgpu::TextureViewDescriptor
+            final_state_mip_views.push(final_state.create_view(&wgpu::TextureViewDescriptor
             {
                 label:             None,
                 format:            Some(wgpu::TextureFormat::Rgba8Unorm),
@@ -562,9 +562,7 @@ impl StafraState
                 mip_level_count:   NonZeroU32::new(1),
                 base_array_layer:  0,
                 array_layer_count: None
-            };
-
-            final_state_mip_views.push(final_state.create_view(&final_state_mip_view_descriptor));
+            }));
         }
 
         let render_state_sampler = device.create_sampler(&wgpu::SamplerDescriptor
@@ -1153,6 +1151,8 @@ impl AppState
 #[wasm_bindgen(start)]
 pub fn entry_point()
 {
+    env_logger::init();
+
     let app_state = AppState::new();
     wasm_bindgen_futures::spawn_local(app_state.run());
 }
