@@ -370,14 +370,14 @@ impl StafraState
             vertex: wgpu::VertexState
             {
                 module: &render_state_vs_module,
-                entry_point: "main_render_vs",
+                entry_point: "main",
                 buffers: &[],
             },
 
             fragment: Some(wgpu::FragmentState
             {
                 module: &render_state_fs_module,
-                entry_point: "main_render_fs",
+                entry_point: "main",
                 targets:
                 &[
                     wgpu::ColorTargetState
