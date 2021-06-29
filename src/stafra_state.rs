@@ -5,6 +5,7 @@ use std::convert::TryInto;
 use std::pin::Pin;
 use std::task::Context;
 use super::dummy_waker;
+use wgpu::Adapter;
 
 pub struct BoardDimensions
 {

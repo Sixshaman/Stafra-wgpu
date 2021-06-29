@@ -48,7 +48,6 @@ void main()
     }
 
     barrier();
-    memoryBarrierShared();
 
     //Masks for halves of 2x2 quad, encoded as
     // (Bits 0-7)   (Bits 8-15)

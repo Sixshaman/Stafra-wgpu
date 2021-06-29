@@ -1,4 +1,3 @@
-if not exist static mkdir static
 if not exist target mkdir target
 
 cd target
@@ -6,9 +5,6 @@ if not exist shaders mkdir shaders
 cd ..
 
 cd static
-
-echo F|xcopy /Y /F "../src/stafra.html" "./stafra.html"
-echo F|xcopy /Y /F "../src/stafra.css" "./stafra.css"
 
 set RUSTFLAGS=--cfg=web_sys_unstable_apis
 set RUST_LOG=warn

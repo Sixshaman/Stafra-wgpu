@@ -75,7 +75,9 @@ impl AppState
         let event_loop_proxy                = Rc::new(event_loop.create_proxy());
 
         let canvas_window = WindowBuilder::new().build(&event_loop).unwrap();
-        let window_size   = canvas_window.inner_size();
+
+        canvas_window.set_inner_size(winit::dpi::LogicalSize {width: 768.0, height: 768.0});
+        let window_size = canvas_window.inner_size();
 
         Self
         {
