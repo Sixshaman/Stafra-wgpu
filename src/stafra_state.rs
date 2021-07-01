@@ -5,7 +5,6 @@ use std::convert::TryInto;
 use std::pin::Pin;
 use std::task::Context;
 use super::dummy_waker;
-use wgpu::Adapter;
 
 pub struct BoardDimensions
 {
@@ -82,7 +81,6 @@ impl StafraState
         device.on_uncaptured_error(|error|
         {
             println!("Wgpu error: {}", error);
-            //web_sys::console::log_1(&format!("Wgpu error: {}", error).into());
         });
 
         let swapchain_format = adapter.get_swap_chain_preferred_format(&surface).unwrap();
@@ -776,7 +774,7 @@ impl StafraState
         self.swap_chain     = self.device.create_swap_chain(&self.surface, &self.sc_desc);
     }
 
-    pub fn get_png_data(&self) -> Result<Vec<u8>, &str>
+    pub fn get_png_data(&self) -> Result<(Vec<u8>, &BoardDimensions), &str>
     {
         let row_alignment = 256 as usize;
         let row_pitch     = ((self.board_size.width as usize * std::mem::size_of::<f32>()) + (row_alignment - 1)) & (!(row_alignment - 1));
@@ -866,7 +864,7 @@ impl StafraState
 
         board_buffer.unmap();
 
-        Ok(image_array)
+        Ok((image_array, &self.board_size))
     }
 
     pub fn reset_board(&self)

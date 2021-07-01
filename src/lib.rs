@@ -3,6 +3,8 @@ mod stafra_state;
 mod app_state;
 
 use wasm_bindgen::prelude::*;
+use console_error_panic_hook;
+use console_log;
 
 #[wasm_bindgen(start)]
 #[cfg(target_arch = "wasm32")]

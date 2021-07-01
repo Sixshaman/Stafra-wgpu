@@ -6,7 +6,11 @@ use winit::
 };
 
 #[cfg(target_arch = "wasm32")]
-use winit::platform::web::WindowBuilderExtWebSys;
+use
+{
+    winit::platform::web::WindowBuilderExtWebSys,
+    wasm_bindgen::closure::Closure
+};
 
 use wasm_bindgen::{JsCast, Clamped};
 use winit::event_loop::EventLoopProxy;
@@ -29,7 +33,7 @@ pub struct AppState
 
 enum AppEvent
 {
-    SavePng,
+    SavePng {},
 }
 
 impl AppState
@@ -42,7 +46,7 @@ impl AppState
 
         let window   = web_sys::window().unwrap();
         let document = window.document().unwrap();
-        let canvas   = document.unwrap().get_element_by_id("STAFRA_canvas").unwrap().dyn_into::<web_sys::HtmlCanvasElement>().ok();
+        let canvas   = document.get_element_by_id("STAFRA_canvas").unwrap().dyn_into::<web_sys::HtmlCanvasElement>().ok();
 
         let canvas_window = WindowBuilder::new().with_canvas(canvas).build(&event_loop).unwrap();
 
@@ -52,8 +56,10 @@ impl AppState
             event_loop_proxy_cloned.send_event(AppEvent::SavePng {});
         }) as Box<dyn Fn()>);
 
-        let save_png_button = document.unwrap().get_element_by_id("save_png_button").unwrap().dyn_into::<web_sys::HtmlButtonElement>().unwrap();
+        let save_png_button = document.get_element_by_id("save_png_button").unwrap().dyn_into::<web_sys::HtmlButtonElement>().unwrap();
         save_png_button.set_onclick(Some(save_png_function.as_ref().unchecked_ref()));
+
+        let window_size = canvas_window.inner_size();
 
         Self
         {
@@ -90,12 +96,16 @@ impl AppState
 
     pub async fn run(self)
     {
+        #[cfg(target_arch = "wasm32")]
+        let document = self.document;
+
         let canvas_window = self.canvas_window;
         let event_loop    = self.event_loop;
 
         let mut window_size = self.window_size;
 
         let mut state = stafra_state::StafraState::new(&canvas_window, stafra_state::BoardDimensions {width: 1023, height: 1023}).await;
+
         state.reset_board();
 
         event_loop.run(move |event, _, control_flow| match event
@@ -168,15 +178,13 @@ impl AppState
                         {
                             match state.get_png_data()
                             {
-                                Ok(mut image_array) =>
+                                Ok((mut image_array, size)) =>
                                 {
-                                    let document = self.document;
-
-                                    let image_data = web_sys::ImageData::new_with_u8_clamped_array(Clamped(image_array.as_mut_slice()), state.board_size.width).unwrap();
+                                    let image_data = web_sys::ImageData::new_with_u8_clamped_array(Clamped(image_array.as_mut_slice()), size.width).unwrap();
 
                                     let canvas = document.create_element("canvas").unwrap().dyn_into::<web_sys::HtmlCanvasElement>().unwrap();
-                                    canvas.set_width(state.board_size.width);
-                                    canvas.set_height(state.board_size.height);
+                                    canvas.set_width(size.width);
+                                    canvas.set_height(size.height);
 
                                     let canvas_context = canvas.get_context("2d").unwrap().unwrap().dyn_into::<web_sys::CanvasRenderingContext2d>().unwrap();
                                     canvas_context.put_image_data(&image_data, 0.0, 0.0);
