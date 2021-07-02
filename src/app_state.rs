@@ -105,7 +105,6 @@ impl AppState
         let mut window_size = self.window_size;
 
         let mut state = stafra_state::StafraState::new(&canvas_window, stafra_state::BoardDimensions {width: 1023, height: 1023}).await;
-
         state.reset_board();
 
         event_loop.run(move |event, _, control_flow| match event

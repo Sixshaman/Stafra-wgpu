@@ -12,18 +12,18 @@ echo F|xcopy /Y /F "../src/stafra.css" "./stafra.css"
 
 set RUSTFLAGS=--cfg=web_sys_unstable_apis
 
-%VULKAN_SDK%/Bin/glslc ../src/shaders/clear_board/clear_4_corners.comp -o ../target/shaders/clear_4_corners.spv
+%VULKAN_SDK%/Bin/glslangValidator -V --target-env spirv1.3 -g -o ../target/shaders/clear_4_corners.spv ../src/shaders/clear_board/clear_4_corners.comp
 
-%VULKAN_SDK%/Bin/glslc ../src/shaders/next_step/next_step.comp -o ../target/shaders/next_step.spv
+%VULKAN_SDK%/Bin/glslangValidator -V --target-env spirv1.3 -g -o ../target/shaders/next_step.spv ../src/shaders/next_step/next_step.comp
 
-%VULKAN_SDK%/Bin/glslc ../src/shaders/state_transform/initial_state_transform.comp -o ../target/shaders/initial_state_transform.spv
-%VULKAN_SDK%/Bin/glslc ../src/shaders/state_transform/final_state_transform.comp   -o ../target/shaders/final_state_transform.spv
-%VULKAN_SDK%/Bin/glslc ../src/shaders/state_transform/clear_stability.comp         -o ../target/shaders/clear_stability.spv
+%VULKAN_SDK%/Bin/glslangValidator -V --target-env spirv1.3 -g -o ../target/shaders/initial_state_transform.spv ../src/shaders/state_transform/initial_state_transform.comp
+%VULKAN_SDK%/Bin/glslangValidator -V --target-env spirv1.3 -g -o ../target/shaders/final_state_transform.spv   ../src/shaders/state_transform/final_state_transform.comp
+%VULKAN_SDK%/Bin/glslangValidator -V --target-env spirv1.3 -g -o ../target/shaders/clear_stability.spv         ../src/shaders/state_transform/clear_stability.comp
 
-%VULKAN_SDK%/Bin/glslc ../src/shaders/render/render_state.vert -o ../target/shaders/render_state_vs.spv
-%VULKAN_SDK%/Bin/glslc ../src/shaders/render/render_state.frag -o ../target/shaders/render_state_fs.spv
+%VULKAN_SDK%/Bin/glslangValidator -V --target-env spirv1.3 -g -o ../target/shaders/render_state_vs.spv ../src/shaders/render/render_state.vert
+%VULKAN_SDK%/Bin/glslangValidator -V --target-env spirv1.3 -g -o ../target/shaders/render_state_fs.spv ../src/shaders/render/render_state.frag
 
-%VULKAN_SDK%/Bin/glslc ../src/shaders/mip/final_state_generate_next_mip.comp -o ../target/shaders/final_state_generate_next_mip.spv
+%VULKAN_SDK%/Bin/glslangValidator -V --target-env spirv1.3 -g -o ../target/shaders/final_state_generate_next_mip.spv ../src/shaders/mip/final_state_generate_next_mip.comp
 
 wasm-pack build --release --target web --out-name Stafra --out-dir static -- --features winit/web-sys
 miniserve --index stafra.html

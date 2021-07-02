@@ -302,7 +302,7 @@ impl StafraState
             ]
         });
 
-        let generate_mip_bind_group_latout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor
+        let generate_mip_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor
         {
             label: None,
             entries:
@@ -357,7 +357,7 @@ impl StafraState
         let generate_mip_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor
         {
             label: None,
-            bind_group_layouts: &[&generate_mip_bind_group_latout],
+            bind_group_layouts: &[&generate_mip_bind_group_layout],
             push_constant_ranges: &[],
         });
 
@@ -711,7 +711,7 @@ impl StafraState
             generate_mip_bind_groups.push(device.create_bind_group(&wgpu::BindGroupDescriptor
             {
                 label: None,
-                layout: &generate_mip_bind_group_latout,
+                layout: &generate_mip_bind_group_layout,
                 entries:
                 &[
                     wgpu::BindGroupEntry
