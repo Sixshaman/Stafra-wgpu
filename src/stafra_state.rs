@@ -871,8 +871,8 @@ impl StafraState
     {
         let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor{label: None});
 
-        let thread_groups_x = std::cmp::max((self.board_size.width + 1) / (2 * 32), 1u32);
-        let thread_groups_y = std::cmp::max((self.board_size.width + 1) / (2 * 32), 1u32);
+        let thread_groups_x = std::cmp::max((self.board_size.width + 1) / (2 * 16), 1u32);
+        let thread_groups_y = std::cmp::max((self.board_size.width + 1) / (2 * 16), 1u32);
 
         {
             let mut reset_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {label: None});
@@ -895,8 +895,8 @@ impl StafraState
 
     pub fn update(&mut self)
     {
-        let thread_groups_x = std::cmp::max((self.board_size.width + 1) / (2 * 32), 1u32);
-        let thread_groups_y = std::cmp::max((self.board_size.width + 1) / (2 * 32), 1u32);
+        let thread_groups_x = std::cmp::max((self.board_size.width + 1) / (2 * 16), 1u32);
+        let thread_groups_y = std::cmp::max((self.board_size.width + 1) / (2 * 16), 1u32);
 
         let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor{label: None});
 
