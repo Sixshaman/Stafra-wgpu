@@ -145,12 +145,12 @@ impl AppState
                     {
                     }
 
-                    Err(wgpu::SwapChainError::Lost) =>
+                    Err(wgpu::SurfaceError::Lost) =>
                     {
                         state.resize(&window_size);
                     }
 
-                    Err(wgpu::SwapChainError::OutOfMemory) =>
+                    Err(wgpu::SurfaceError::OutOfMemory) =>
                     {
                         *control_flow = ControlFlow::Exit;
                     }

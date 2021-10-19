@@ -7,7 +7,6 @@ mkdir -p target/shaders
 
 # shellcheck disable=SC2164
 cd static
-
 cp ../src/stafra.html stafra.html
 cp ../src/stafra.css stafra.css
 
