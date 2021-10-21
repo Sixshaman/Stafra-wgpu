@@ -10,18 +10,6 @@ layout(set = 0, binding = 0) uniform texture2D initialStateTex;
 
 layout(set = 0, binding = 1, r32ui) uniform writeonly uimage2D outInitialBoard;
 
-uint buildPackedQuadValue(uvec4 values)
-{
-	//Packs a uint32-encoded quad:
-	// (Bits 0-7)   (Bits 8-15)
-	// (Bits 16-23) (Bits 24-31)
-	//From a bvec4-encoded quad:
-	// (values.x) (values.y)
-	// (values.z) (values.w)
-	return ((values.x & 0xffu) <<  0) | ((values.y & 0xffu) <<  8)
-	     | ((values.z & 0xffu) << 16) | ((values.w & 0xffu) << 24);
-}
-
 void main()
 {
 	vec4 lumCoeff = vec4(0.2126f, 0.7152f, 0.0722f, 0.0f);
@@ -35,7 +23,11 @@ void main()
 	mat4x4 stateColorMat    = mat4x4(topLeftQuad, topRightQuad, bottomLeftQuad, bottomRightQuad);
 	uvec4 stateColorResults = uvec4(greaterThan(lumCoeff * stateColorMat, vec4(0.15f)));
 
-	uint packedQuad = buildPackedQuadValue(stateColorResults);
+	//Pack a uint32-encoded quad      from a bvec4-encoded quad:
+	// (Bits 0-7)   (Bits 8-15)       (values.x) (values.y)
+	// (Bits 16-23) (Bits 24-31)      (values.z) (values.w)
+	uint packedQuad = ((stateColorResults.x & 0xffu) <<  0) | ((stateColorResults.y & 0xffu) <<  8)
+	                | ((stateColorResults.z & 0xffu) << 16) | ((stateColorResults.w & 0xffu) << 24);
 
 	//Masks for halves of 2x2 quad, encoded as
 	// (Bits 0-7)   (Bits 8-15)

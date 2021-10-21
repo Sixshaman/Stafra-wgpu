@@ -4,16 +4,6 @@ layout(local_size_x = 16, local_size_y = 16) in;
 
 layout(set = 0, binding = 0, r32ui) uniform writeonly uimage2D outInitialBoard;
 
-uint buildPackedQuadValue(bvec4 inCornerQuadValues)
-{
-	//Packs a uint32-encoded quad:
-	// (Bits 0-7)   (Bits 8-15)
-	// (Bits 16-23) (Bits 24-31)
-	//Since the board size is 2^n - 1, each corner 2x2 quad corresponds only to the top-left value of encoded quad
-	uint inCorner = uint(any(inCornerQuadValues));
-	return inCorner;
-}
-
 void main()
 {
 	ivec2 boardSize = imageSize(outInitialBoard);
@@ -27,5 +17,10 @@ void main()
 	bvec4 inCornerQuadValues = bvec4(gl_GlobalInvocationID.xy == topLeft,    gl_GlobalInvocationID.xy == topRight,
 	                                 gl_GlobalInvocationID.xy == bottomLeft, gl_GlobalInvocationID.xy == bottomRight);
 
-    imageStore(outInitialBoard, ivec2(gl_GlobalInvocationID.xy), uvec4(buildPackedQuadValue(inCornerQuadValues)));
+	//Pack a uint32-encoded quad:
+	// (Bits 0-7)   (Bits 8-15)
+	// (Bits 16-23) (Bits 24-31)
+	//Since the board size is 2^n - 1, each corner 2x2 quad corresponds only to the top-left value of encoded quad
+	uint inCorner = uint(any(inCornerQuadValues));
+    imageStore(outInitialBoard, ivec2(gl_GlobalInvocationID.xy), uvec4(inCorner));
 }

@@ -824,6 +824,7 @@ impl StafraState
 
         self.queue.submit(std::iter::once(buffer_copy_encoder.finish()));
 
+        /*
         let png_buffer_slice      = board_buffer.slice(..);
         let mut buffer_map_future = png_buffer_slice.map_async(wgpu::MapMode::Read);
 
@@ -868,6 +869,7 @@ impl StafraState
         }
 
         board_buffer.unmap();
+        */
 
         Ok((image_array, &self.board_size))
     }

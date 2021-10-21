@@ -11,17 +11,13 @@ layout(set = 0, binding = 0) uniform utexture2D finalBoard;
 //The reason for this is that web-sys, which wgpu-rs is based on, doesn't support nonGuaranteedLimits property of GPUDeviceDescriptor
 layout(set = 0, binding = 1, rgba8) uniform writeonly image2D outTexMip0;
 
-uvec4 unpackQuadValue(uint packedQuad)
-{
-	//Unpacks a quad
-	return uvec4((packedQuad >>  0) & 0xffu, (packedQuad >>  8) & 0xffu,
-	             (packedQuad >> 16) & 0xffu, (packedQuad >> 24) & 0xffu);
-}
-
 void main()
 {
-	uint  finalStability     = texelFetch(finalBoard, ivec2(gl_GlobalInvocationID.xy), 0).x;
-	uvec4 finalStabilityQuad = unpackQuadValue(finalStability);
+	uint finalStabilityEncoded = texelFetch(finalBoard, ivec2(gl_GlobalInvocationID.xy), 0).x;
+
+	//Unpack an encoded quad
+	uvec4 finalStabilityQuad = uvec4((finalStabilityEncoded >>  0) & 0xffu, (finalStabilityEncoded >>  8) & 0xffu,
+	                                 (finalStabilityEncoded >> 16) & 0xffu, (finalStabilityEncoded >> 24) & 0xffu);
 
 	finalStabilityQuad = finalStabilityQuad * uvec4(lessThan(finalStabilityQuad, uvec4(2))); //Zero out all values that have final stability >= 2
 
