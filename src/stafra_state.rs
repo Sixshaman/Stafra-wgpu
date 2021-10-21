@@ -824,11 +824,11 @@ impl StafraState
 
         self.queue.submit(std::iter::once(buffer_copy_encoder.finish()));
 
+        let mut image_array = Vec::with_capacity((self.board_size.width * self.board_size.height * 4) as usize);
+
         /*
         let png_buffer_slice      = board_buffer.slice(..);
         let mut buffer_map_future = png_buffer_slice.map_async(wgpu::MapMode::Read);
-
-        let mut image_array = Vec::with_capacity((self.board_size.width * self.board_size.height * 4) as usize);
 
         let waker = dummy_waker::dummy_waker();
         let mut context = Context::from_waker(&waker);
