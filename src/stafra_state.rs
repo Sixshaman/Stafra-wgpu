@@ -5,11 +5,20 @@ use std::convert::TryInto;
 use std::pin::Pin;
 use std::task::Context;
 use super::dummy_waker;
+use image::EncodableLayout;
 
+#[derive(Copy, Clone)]
 pub struct BoardDimensions
 {
     pub width:  u32,
     pub height: u32
+}
+
+struct SavePngRequest
+{
+    save_png_buffer: wgpu::Buffer,
+    save_png_future: Box<dyn Future<Output = Result<(), wgpu::BufferAsyncError>> + Unpin>,
+    row_pitch:       usize
 }
 
 pub struct StafraState
@@ -39,6 +48,8 @@ pub struct StafraState
     final_transform_bind_group_b: wgpu::BindGroup,
     clear_stability_bind_group:   wgpu::BindGroup,
     generate_mip_bind_groups:     Vec<wgpu::BindGroup>,
+
+    save_png_request: Option<SavePngRequest>,
 
     #[allow(dead_code)]
     current_board:     wgpu::Texture,
@@ -756,6 +767,8 @@ impl StafraState
             final_transform_bind_group_b,
             clear_stability_bind_group,
 
+            save_png_request: None,
+
             current_board,
             next_board,
             current_stability,
@@ -778,21 +791,28 @@ impl StafraState
         });
     }
 
-    pub fn get_png_data(&self) -> Result<(Vec<u8>, &BoardDimensions), &str>
+    pub fn post_png_data_request(&mut self)
     {
-        let row_alignment = 256 as usize;
-        let row_pitch     = ((self.board_size.width as usize * std::mem::size_of::<f32>()) + (row_alignment - 1)) & (!(row_alignment - 1));
+        if let Some(_) = &self.save_png_request
+        {
+            return;
+        }
 
-        let board_buffer = self.device.create_buffer(&wgpu::BufferDescriptor
+        let real_width  = (self.board_size.width  + 1) / 2;
+        let real_height = (self.board_size.height + 1) / 2;
+
+        let row_alignment = 256 as usize;
+        let row_pitch     = ((real_width as usize * std::mem::size_of::<f32>()) + (row_alignment - 1)) & (!(row_alignment - 1));
+
+        let save_png_buffer = self.device.create_buffer(&wgpu::BufferDescriptor
         {
             label:              None,
-            size:               (row_pitch * self.board_size.height as usize) as u64,
+            size:               (row_pitch * real_height as usize) as u64,
             usage:              wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false
         });
 
         let mut buffer_copy_encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor{label: None});
-
         buffer_copy_encoder.copy_texture_to_buffer(wgpu::ImageCopyTexture
         {
             texture:   &self.final_state,
@@ -807,71 +827,111 @@ impl StafraState
         },
         wgpu::ImageCopyBuffer
         {
-            buffer: &board_buffer,
+            buffer: &save_png_buffer,
             layout: wgpu::ImageDataLayout
             {
                 offset:         0,
                 bytes_per_row:  std::num::NonZeroU32::new(row_pitch as u32),
-                rows_per_image: std::num::NonZeroU32::new(self.board_size.height)
+                rows_per_image: std::num::NonZeroU32::new(real_height)
             }
         },
         wgpu::Extent3d
         {
-            width:                 self.board_size.width,
-            height:                self.board_size.height,
+            width:                 real_width,
+            height:                real_height,
             depth_or_array_layers: 1
         });
 
         self.queue.submit(std::iter::once(buffer_copy_encoder.finish()));
 
-        let mut image_array = Vec::with_capacity((self.board_size.width * self.board_size.height * 4) as usize);
+        let save_png_buffer_slice = save_png_buffer.slice(..);
+        let save_png_future       = Box::new(save_png_buffer_slice.map_async(wgpu::MapMode::Read));
 
-        /*
-        let png_buffer_slice      = board_buffer.slice(..);
-        let mut buffer_map_future = png_buffer_slice.map_async(wgpu::MapMode::Read);
+        self.save_png_request = Some(SavePngRequest
+        {
+            save_png_buffer,
+            save_png_future,
+            row_pitch
+        })
+    }
 
-        let waker = dummy_waker::dummy_waker();
+    pub fn check_png_data_request(&mut self) -> Result<(Vec<u8>, BoardDimensions, u32), String>
+    {
+        if let None = &self.save_png_request
+        {
+            return Err("Not requested".to_string());
+        }
+
+        let unwrapped_request = &mut self.save_png_request.as_mut().unwrap();
+
+        let save_png_buffer = &unwrapped_request.save_png_buffer;
+        let save_png_future = &mut unwrapped_request.save_png_future;
+        let row_pitch       = unwrapped_request.row_pitch;
+
+        let waker       = dummy_waker::dummy_waker();
         let mut context = Context::from_waker(&waker);
 
-        let performance = web_sys::window().unwrap().performance().unwrap();
-        let start_time  = performance.now();
-        loop
+        let pinned_future = Pin::new(save_png_future.as_mut());
+        match Future::poll(pinned_future, &mut context)
         {
-            //Busy wait because asyncs in winit don't work
-            let pinned_future = Pin::new(&mut buffer_map_future);
-            match Future::poll(pinned_future, &mut context)
+            std::task::Poll::Ready(_) =>
             {
-                std::task::Poll::Ready(_) => break,
-                std::task::Poll::Pending =>
+                let padded_width  = self.board_size.width  + 1;
+                let padded_height = self.board_size.height + 1;
+
+                let mut image_array = vec![0; (padded_width * padded_height * 4) as usize];
                 {
-                    let current_time = performance.now();
-                    if current_time - start_time > 2000.0 //Max busy wait time is 2 seconds
+                    let png_buffer_view = save_png_buffer.slice(..).get_mapped_range();
+                    for (row_index, row_chunk) in png_buffer_view.chunks(row_pitch).enumerate()
                     {
-                        board_buffer.unmap();
-                        return Err("Timeout");
+                        let real_row_index = (row_index * 2) as u32;
+                        for (column_index, texel_bytes) in row_chunk.chunks(4).enumerate()
+                        {
+                            let real_column_index = (column_index * 2) as u32;
+
+                            //Decode the quad
+                            let topleft  = texel_bytes[0] as f32;
+                            let topright = texel_bytes[1] as f32;
+                            let botleft  = texel_bytes[2] as f32;
+                            let botright = texel_bytes[3] as f32;
+
+                            let topleft_start  = (((real_row_index + 0) * padded_width + real_column_index + 0) * 4) as usize;
+                            let topright_start = (((real_row_index + 0) * padded_width + real_column_index + 1) * 4) as usize;
+                            let botleft_start  = (((real_row_index + 1) * padded_width + real_column_index + 0) * 4) as usize;
+                            let botright_start = (((real_row_index + 1) * padded_width + real_column_index + 1) * 4) as usize;
+
+                            image_array[topleft_start + 0] = (topleft * 255.0) as u8; //Red
+                            image_array[topleft_start + 1] = 0u8;                     //Green
+                            image_array[topleft_start + 2] = (topleft * 255.0) as u8; //Blue
+                            image_array[topleft_start + 3] = 255u8;                   //Alpha
+
+                            image_array[topright_start + 0] = (topright * 255.0) as u8; //Red
+                            image_array[topright_start + 1] = 0u8;                      //Green
+                            image_array[topright_start + 2] = (topright * 255.0) as u8; //Blue
+                            image_array[topright_start + 3] = 255u8;                    //Alpha
+
+                            image_array[botleft_start + 0] = (botleft * 255.0) as u8; //Red
+                            image_array[botleft_start + 1] = 0u8;                     //Green
+                            image_array[botleft_start + 2] = (botleft * 255.0) as u8; //Blue
+                            image_array[botleft_start + 3] = 255u8;                   //Alpha
+
+                            image_array[botright_start + 0] = (botright * 255.0) as u8; //Red
+                            image_array[botright_start + 1] = 0u8;                      //Green
+                            image_array[botright_start + 2] = (botright * 255.0) as u8; //Blue
+                            image_array[botright_start + 3] = 255u8;                    //Alpha
+                        }
                     }
                 }
+
+                save_png_buffer.unmap();
+
+                self.save_png_request = None;
+
+                Ok((image_array, self.board_size, padded_width))
             }
+
+            std::task::Poll::Pending => Err("Pending".to_string())
         }
-
-        let png_buffer_view = png_buffer_slice.get_mapped_range();
-        for row_chunk in png_buffer_view.chunks(row_pitch)
-        {
-            for texel in row_chunk.chunks(4)
-            {
-                let val = f32::from_le_bytes(texel[0..4].try_into().unwrap());
-
-                image_array.push((val * 255.0) as u8); //Red
-                image_array.push(0u8);                 //Green
-                image_array.push((val * 255.0) as u8); //Blue
-                image_array.push(255u8);               //Alpha
-            }
-        }
-
-        board_buffer.unmap();
-        */
-
-        Ok((image_array, &self.board_size))
     }
 
     pub fn reset_board(&self)

@@ -139,6 +139,34 @@ impl AppState
             Event::RedrawRequested(_) =>
             {
                 state.update();
+
+                match state.check_png_data_request()
+                {
+                    Ok((mut image_array, size, row_pitch)) =>
+                    {
+                        let image_data = web_sys::ImageData::new_with_u8_clamped_array(Clamped(image_array.as_mut_slice()), row_pitch).unwrap();
+
+                        let canvas = document.create_element("canvas").unwrap().dyn_into::<web_sys::HtmlCanvasElement>().unwrap();
+                        canvas.set_width(size.width);
+                        canvas.set_height(size.height);
+
+                        let canvas_context = canvas.get_context("2d").unwrap().unwrap().dyn_into::<web_sys::CanvasRenderingContext2d>().unwrap();
+                        canvas_context.put_image_data(&image_data, 0.0, 0.0);
+
+                        let link = document.create_element("a").unwrap().dyn_into::<web_sys::HtmlAnchorElement>().unwrap();
+                        link.set_href(&canvas.to_data_url_with_type("image/png").unwrap());
+                        link.set_download(&"StabilityFractal.png");
+                        link.click();
+
+                        link.remove();
+                        canvas.remove();
+                    },
+
+                    Err(_) =>
+                    {
+                    }
+                }
+
                 match state.render()
                 {
                     Ok(_) =>
@@ -175,33 +203,7 @@ impl AppState
                     {
                         #[cfg(target_arch = "wasm32")]
                         {
-                            match state.get_png_data()
-                            {
-                                Ok((mut image_array, size)) =>
-                                {
-                                    let image_data = web_sys::ImageData::new_with_u8_clamped_array(Clamped(image_array.as_mut_slice()), size.width).unwrap();
-
-                                    let canvas = document.create_element("canvas").unwrap().dyn_into::<web_sys::HtmlCanvasElement>().unwrap();
-                                    canvas.set_width(size.width);
-                                    canvas.set_height(size.height);
-
-                                    let canvas_context = canvas.get_context("2d").unwrap().unwrap().dyn_into::<web_sys::CanvasRenderingContext2d>().unwrap();
-                                    canvas_context.put_image_data(&image_data, 0.0, 0.0);
-
-                                    let link = document.create_element("a").unwrap().dyn_into::<web_sys::HtmlAnchorElement>().unwrap();
-                                    link.set_target(&canvas.to_data_url_with_type("image/png").unwrap());
-                                    link.set_download(&"LightsOutMatrix.png");
-                                    link.click();
-
-                                    link.remove();
-                                    canvas.remove();
-                                },
-
-                                Err(message) =>
-                                {
-                                    web_sys::console::log_1(&format!("Error saving PNG image: {}", message).into());
-                                }
-                            }
+                            state.post_png_data_request();
                         }
                     }
                 }
