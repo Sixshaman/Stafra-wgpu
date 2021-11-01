@@ -3,3 +3,17 @@
     width:  95vmin !important;
     height: 95vmin !important;
 }
+
+#container
+{
+    display:        flex;
+    flex-direction: row;
+    flex-wrap:      wrap;
+}
+
+#right_part
+{
+    display:               flex;
+    flex-direction:        column;
+    grid-template-columns: 3em 3em 3em;
+}
