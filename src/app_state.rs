@@ -17,23 +17,35 @@ use winit::event_loop::EventLoopProxy;
 use std::rc::Rc;
 use super::stafra_state;
 
+enum RunState
+{
+    Stopped,
+    Paused,
+    Running
+}
+
 pub struct AppState
 {
     event_loop:       EventLoop<AppEvent>,
     event_loop_proxy: Rc<EventLoopProxy<AppEvent>>,
     canvas_window:    Window,
     window_size:      winit::dpi::PhysicalSize<u32>,
+    run_state:        RunState,
 
     #[cfg(target_arch = "wasm32")]
     document: web_sys::Document,
 
     #[cfg(target_arch = "wasm32")]
     save_png_function: Closure<dyn Fn()>,
+
+    #[cfg(target_arch = "wasm32")]
+    play_pause_function: Closure<dyn Fn()>,
 }
 
 enum AppEvent
 {
     SavePng {},
+    SwitchPlayPause {},
 }
 
 impl AppState
@@ -50,16 +62,29 @@ impl AppState
 
         let canvas_window = WindowBuilder::new().with_canvas(canvas).build(&event_loop).unwrap();
 
-        let event_loop_proxy_cloned = event_loop_proxy.clone();
+
+        let event_loop_proxy_save_png = event_loop_proxy.clone();
         let save_png_function = Closure::wrap(Box::new(move ||
         {
-            event_loop_proxy_cloned.send_event(AppEvent::SavePng {});
+            event_loop_proxy_save_png.send_event(AppEvent::SavePng {});
         }) as Box<dyn Fn()>);
 
-        let save_png_button = document.get_element_by_id("save_png_button").unwrap().dyn_into::<web_sys::HtmlButtonElement>().unwrap();
+        let save_png_button = document.get_element_by_id("button_save_png").unwrap().dyn_into::<web_sys::HtmlButtonElement>().unwrap();
         save_png_button.set_onclick(Some(save_png_function.as_ref().unchecked_ref()));
 
+
+        let event_loop_proxy_play_pause = event_loop_proxy.clone();
+        let play_pause_function = Closure::wrap(Box::new(move ||
+        {
+            event_loop_proxy_play_pause.send_event(AppEvent::SwitchPlayPause {});
+        }) as Box<dyn Fn()>);
+
+        let play_pause_button = document.get_element_by_id("button_play_pause").unwrap().dyn_into::<web_sys::HtmlButtonElement>().unwrap();
+        play_pause_button.set_onclick(Some(play_pause_function.as_ref().unchecked_ref()));
+
+
         let window_size = canvas_window.inner_size();
+        let run_state   = RunState::Running;
 
         Self
         {
@@ -67,10 +92,12 @@ impl AppState
             event_loop_proxy,
             canvas_window,
             window_size,
+            run_state,
 
             document,
 
-            save_png_function
+            save_png_function,
+            play_pause_function
         }
     }
 
@@ -85,12 +112,14 @@ impl AppState
         canvas_window.set_inner_size(winit::dpi::LogicalSize {width: 768.0, height: 768.0});
         let window_size = canvas_window.inner_size();
 
+        let run_state = RunState::Running;
         Self
         {
             event_loop,
             event_loop_proxy,
             canvas_window,
-            window_size
+            window_size,
+            run_state
         }
     }
 
@@ -103,6 +132,7 @@ impl AppState
         let event_loop    = self.event_loop;
 
         let mut window_size = self.window_size;
+        let mut run_state   = self.run_state;
 
         let mut state = stafra_state::StafraState::new(&canvas_window, stafra_state::BoardDimensions {width: 1023, height: 1023}).await;
         state.reset_board();
@@ -138,7 +168,10 @@ impl AppState
 
             Event::RedrawRequested(_) =>
             {
-                state.update();
+                if let RunState::Running{} = run_state
+                {
+                    state.update();
+                }
 
                 match state.check_png_data_request()
                 {
@@ -204,6 +237,38 @@ impl AppState
                         #[cfg(target_arch = "wasm32")]
                         {
                             state.post_png_data_request();
+                        }
+                    }
+
+                    AppEvent::SwitchPlayPause {} =>
+                    {
+                        match run_state
+                        {
+                            RunState::Running =>
+                            {
+                                run_state = RunState::Paused;
+
+                                #[cfg(target_arch = "wasm32")]
+                                {
+                                    let play_pause_button = document.get_element_by_id("button_play_pause").unwrap().dyn_into::<web_sys::HtmlButtonElement>().unwrap();
+                                    play_pause_button.set_text_content(Some("▶️"));
+                                }
+                            }
+
+                            RunState::Paused =>
+                            {
+                                run_state = RunState::Running;
+
+                                #[cfg(target_arch = "wasm32")]
+                                {
+                                    let play_pause_button = document.get_element_by_id("button_play_pause").unwrap().dyn_into::<web_sys::HtmlButtonElement>().unwrap();
+                                    play_pause_button.set_text_content(Some("⏸️"));
+                                }
+                            }
+
+                            _ =>
+                            {
+                            }
                         }
                     }
                 }
