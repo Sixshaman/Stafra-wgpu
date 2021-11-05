@@ -36,13 +36,17 @@ pub struct AppState
 
     #[cfg(target_arch = "wasm32")]
     stop_function: Closure<dyn Fn()>,
+
+    #[cfg(target_arch = "wasm32")]
+    next_frame_function: Closure<dyn Fn()>,
 }
 
 enum AppEvent
 {
     SavePng {},
     SwitchPlayPause {},
-    Stop {}
+    Stop {},
+    NextFrame {}
 }
 
 impl AppState
@@ -90,6 +94,18 @@ impl AppState
         stop_button.set_onclick(Some(stop_function.as_ref().unchecked_ref()));
 
 
+        let event_loop_next_frame = event_loop_proxy.clone();
+        let next_frame_function = Closure::wrap(Box::new(move ||
+        {
+            event_loop_next_frame.send_event(AppEvent::NextFrame {});
+        }) as Box<dyn Fn()>);
+
+        let next_frame_button = document.get_element_by_id("button_next_frame").unwrap().dyn_into::<web_sys::HtmlButtonElement>().unwrap();
+        next_frame_button.set_onclick(Some(next_frame_function.as_ref().unchecked_ref()));
+
+        next_frame_button.set_disabled(true);
+
+
         let window_size = canvas_window.inner_size();
         let paused      = false;
 
@@ -105,7 +121,8 @@ impl AppState
 
             save_png_function,
             play_pause_function,
-            stop_function
+            stop_function,
+            next_frame_function
         }
     }
 
@@ -255,12 +272,15 @@ impl AppState
                             let play_pause_button = document.get_element_by_id("button_play_pause").unwrap().dyn_into::<web_sys::HtmlButtonElement>().unwrap();
                             if paused
                             {
-                                play_pause_button.set_text_content(Some("▶️"));
+                                play_pause_button.set_text_content(Some("⏸️"));
                             }
                             else
                             {
-                                play_pause_button.set_text_content(Some("⏸️"));
+                                play_pause_button.set_text_content(Some("▶️"));
                             }
+
+                            let next_frame_button = document.get_element_by_id("button_next_frame").unwrap().dyn_into::<web_sys::HtmlButtonElement>().unwrap();
+                            next_frame_button.set_disabled(paused);
                         }
 
                         paused = !paused;
@@ -268,14 +288,27 @@ impl AppState
 
                     AppEvent::Stop {} =>
                     {
+                        paused = true;
+
                         #[cfg(target_arch = "wasm32")]
                         {
                             let play_pause_button = document.get_element_by_id("button_play_pause").unwrap().dyn_into::<web_sys::HtmlButtonElement>().unwrap();
                             play_pause_button.set_text_content(Some("▶️"));
+
+                            let next_frame_button = document.get_element_by_id("button_next_frame").unwrap().dyn_into::<web_sys::HtmlButtonElement>().unwrap();
+                            next_frame_button.set_disabled(false);
                         }
 
-                        paused = true;
                         state.reset_board();
+                        canvas_window.request_redraw();
+                    },
+
+                    AppEvent::NextFrame {} =>
+                    {
+                        if paused
+                        {
+                            state.update();
+                        }
                     }
                 }
             }

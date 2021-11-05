@@ -31,6 +31,7 @@ pub struct StafraState
 
     board_size:       BoardDimensions,
     final_state_mips: u32,
+    frame_number:     u32,
 
     render_state_pipeline:            wgpu::RenderPipeline,
     clear_4_corners_pipeline:         wgpu::ComputePipeline,
@@ -46,7 +47,8 @@ pub struct StafraState
     next_step_bind_group_b:       wgpu::BindGroup,
     final_transform_bind_group_a: wgpu::BindGroup,
     final_transform_bind_group_b: wgpu::BindGroup,
-    clear_stability_bind_group:   wgpu::BindGroup,
+    clear_stability_bind_group_a: wgpu::BindGroup,
+    clear_stability_bind_group_b: wgpu::BindGroup,
     generate_mip_bind_groups:     Vec<wgpu::BindGroup>,
 
     save_png_request: Option<SavePngRequest>,
@@ -701,7 +703,7 @@ impl StafraState
             ]
         });
 
-        let clear_stability_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor
+        let clear_stability_bind_group_a = device.create_bind_group(&wgpu::BindGroupDescriptor
         {
             label: None,
             layout: &clear_stability_bind_group_layout,
@@ -711,6 +713,20 @@ impl StafraState
                 {
                     binding: 0,
                     resource: wgpu::BindingResource::TextureView(&current_stability_view),
+                },
+            ]
+        });
+
+        let clear_stability_bind_group_b = device.create_bind_group(&wgpu::BindGroupDescriptor
+        {
+            label: None,
+            layout: &clear_stability_bind_group_layout,
+            entries:
+            &[
+                wgpu::BindGroupEntry
+                {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&next_stability_view),
                 },
             ]
         });
@@ -749,6 +765,7 @@ impl StafraState
 
             final_state_mips,
             board_size,
+            frame_number: 0,
 
             render_state_pipeline,
             clear_4_corners_pipeline,
@@ -765,7 +782,8 @@ impl StafraState
             next_step_bind_group_b,
             final_transform_bind_group_a,
             final_transform_bind_group_b,
-            clear_stability_bind_group,
+            clear_stability_bind_group_a,
+            clear_stability_bind_group_b,
 
             save_png_request: None,
 
@@ -934,73 +952,37 @@ impl StafraState
         }
     }
 
-    pub fn reset_board(&self)
+    pub fn reset_board(&mut self)
     {
         let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor{label: None});
 
-        let thread_groups_x = std::cmp::max((self.board_size.width + 1) / (2 * 16), 1u32);
-        let thread_groups_y = std::cmp::max((self.board_size.width + 1) / (2 * 16), 1u32);
-
+        if self.frame_number % 2 == 1
         {
-            let mut reset_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {label: None});
-
-            reset_pass.set_pipeline(&self.clear_4_corners_pipeline);
-            reset_pass.set_bind_group(0, &self.clear_4_corners_bind_group, &[]);
-            reset_pass.dispatch(thread_groups_x, thread_groups_y, 1);
+            //Make sure we're clearing the right one
+            std::mem::swap(&mut self.next_step_bind_group_a, &mut self.next_step_bind_group_b);
+            std::mem::swap(&mut self.final_transform_bind_group_a, &mut self.final_transform_bind_group_b);
         }
 
-        {
-            let mut clear_stability_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {label: None});
+        self.frame_number = 0;
 
-            clear_stability_pass.set_pipeline(&self.clear_stability_pipeline);
-            clear_stability_pass.set_bind_group(0, &self.clear_stability_bind_group, &[]);
-            clear_stability_pass.dispatch(thread_groups_x, thread_groups_y, 1);
-        }
+        self.clear_stability(&mut encoder);
+        self.generate_final_image(&mut encoder);
 
         self.queue.submit(std::iter::once(encoder.finish()));
     }
 
     pub fn update(&mut self)
     {
-        let thread_groups_x = std::cmp::max((self.board_size.width + 1) / (2 * 16), 1u32);
-        let thread_groups_y = std::cmp::max((self.board_size.width + 1) / (2 * 16), 1u32);
-
         let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor{label: None});
 
-        {
-            let mut reset_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {label: None});
+        self.calc_next_frame(&mut encoder);
+        self.generate_final_image(&mut encoder);
 
-            reset_pass.set_pipeline(&self.next_step_pipeline);
-            reset_pass.set_bind_group(0, &self.next_step_bind_group_a, &[]);
-            reset_pass.dispatch(thread_groups_x, thread_groups_y, 1);
-        }
-
-        {
-            let mut final_transform_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {label: None});
-
-            final_transform_pass.set_pipeline(&self.final_state_transform_pipeline);
-            final_transform_pass.set_bind_group(0, &self.final_transform_bind_group_a, &[]);
-            final_transform_pass.dispatch(thread_groups_x, thread_groups_y, 1);
-        }
-
-        let mut thread_groups_mip_x = std::cmp::max(thread_groups_x / 2, 1u32);
-        let mut thread_groups_mip_y = std::cmp::max(thread_groups_y / 2, 1u32);
-        for i in 0..(self.final_state_mips - 1)
-        {
-            let mut generate_mip_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {label: None});
-
-            generate_mip_pass.set_pipeline(&self.generate_mip_pipeline);
-            generate_mip_pass.set_bind_group(0, &self.generate_mip_bind_groups[i as usize], &[]);
-            generate_mip_pass.dispatch(thread_groups_mip_x, thread_groups_mip_y, 1);
-
-            thread_groups_mip_x = std::cmp::max(thread_groups_mip_x / 2, 1u32);
-            thread_groups_mip_y = std::cmp::max(thread_groups_mip_y / 2, 1u32);
-        }
+        std::mem::swap(&mut self.next_step_bind_group_a, &mut self.next_step_bind_group_b);
+        std::mem::swap(&mut self.final_transform_bind_group_a, &mut self.final_transform_bind_group_b);
+        self.frame_number += 1;
 
         self.queue.submit(std::iter::once(encoder.finish()));
-
-        std::mem::swap(&mut self.next_step_bind_group_a,       &mut self.next_step_bind_group_b);
-        std::mem::swap(&mut self.final_transform_bind_group_a, &mut self.final_transform_bind_group_b);
     }
 
     pub fn render(&mut self) -> Result<(), wgpu::SurfaceError>
@@ -1040,5 +1022,77 @@ impl StafraState
         frame.present();
 
         Ok(())
+    }
+
+    fn calc_next_frame(&self, encoder: &mut wgpu::CommandEncoder)
+    {
+        let thread_groups_x = std::cmp::max((self.board_size.width + 1) / (2 * 16), 1u32);
+        let thread_groups_y = std::cmp::max((self.board_size.width + 1) / (2 * 16), 1u32);
+
+        {
+            let mut next_step_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {label: None});
+
+            next_step_pass.set_pipeline(&self.next_step_pipeline);
+            next_step_pass.set_bind_group(0, &self.next_step_bind_group_a, &[]);
+            next_step_pass.dispatch(thread_groups_x, thread_groups_y, 1);
+        }
+    }
+
+    fn generate_final_image(&self, encoder: &mut wgpu::CommandEncoder)
+    {
+        let thread_groups_x = std::cmp::max((self.board_size.width + 1) / (2 * 16), 1u32);
+        let thread_groups_y = std::cmp::max((self.board_size.width + 1) / (2 * 16), 1u32);
+
+        {
+            let mut final_transform_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {label: None});
+
+            final_transform_pass.set_pipeline(&self.final_state_transform_pipeline);
+            final_transform_pass.set_bind_group(0, &self.final_transform_bind_group_a, &[]);
+            final_transform_pass.dispatch(thread_groups_x, thread_groups_y, 1);
+        }
+
+        let mut thread_groups_mip_x = std::cmp::max(thread_groups_x / 2, 1u32);
+        let mut thread_groups_mip_y = std::cmp::max(thread_groups_y / 2, 1u32);
+        for i in 0..(self.final_state_mips - 1)
+        {
+            let mut generate_mip_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {label: None});
+
+            generate_mip_pass.set_pipeline(&self.generate_mip_pipeline);
+            generate_mip_pass.set_bind_group(0, &self.generate_mip_bind_groups[i as usize], &[]);
+            generate_mip_pass.dispatch(thread_groups_mip_x, thread_groups_mip_y, 1);
+
+            thread_groups_mip_x = std::cmp::max(thread_groups_mip_x / 2, 1u32);
+            thread_groups_mip_y = std::cmp::max(thread_groups_mip_y / 2, 1u32);
+        }
+    }
+
+    fn clear_stability(&self, encoder: &mut wgpu::CommandEncoder)
+    {
+        let thread_groups_x = std::cmp::max((self.board_size.width + 1) / (2 * 16), 1u32);
+        let thread_groups_y = std::cmp::max((self.board_size.width + 1) / (2 * 16), 1u32);
+
+        {
+            let mut reset_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {label: None});
+
+            reset_pass.set_pipeline(&self.clear_4_corners_pipeline);
+            reset_pass.set_bind_group(0, &self.clear_4_corners_bind_group, &[]);
+            reset_pass.dispatch(thread_groups_x, thread_groups_y, 1);
+        }
+
+        {
+            let mut clear_stability_pass_a = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {label: None});
+
+            clear_stability_pass_a.set_pipeline(&self.clear_stability_pipeline);
+            clear_stability_pass_a.set_bind_group(0, &self.clear_stability_bind_group_a, &[]);
+            clear_stability_pass_a.dispatch(thread_groups_x, thread_groups_y, 1);
+        }
+
+        {
+            let mut clear_stability_pass_b = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {label: None});
+
+            clear_stability_pass_b.set_pipeline(&self.clear_stability_pipeline);
+            clear_stability_pass_b.set_bind_group(0, &self.clear_stability_bind_group_b, &[]);
+            clear_stability_pass_b.dispatch(thread_groups_x, thread_groups_y, 1);
+        }
     }
 }
