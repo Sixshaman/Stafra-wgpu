@@ -1,7 +1,7 @@
 use winit::
 {
     event::{Event, WindowEvent},
-    event_loop::{ControlFlow, EventLoop},
+    event_loop::{ControlFlow, EventLoop, EventLoopProxy},
     window::{WindowBuilder, Window},
 };
 
@@ -13,9 +13,16 @@ use
 };
 
 use wasm_bindgen::{JsCast, Clamped};
-use winit::event_loop::EventLoopProxy;
 use std::rc::Rc;
 use super::stafra_state;
+
+#[derive(Copy, Clone, PartialEq)]
+enum RunState
+{
+    Stopped,
+    Paused,
+    Running
+}
 
 pub struct AppState
 {
@@ -23,7 +30,7 @@ pub struct AppState
     event_loop_proxy: Rc<EventLoopProxy<AppEvent>>,
     canvas_window:    Window,
     window_size:      winit::dpi::PhysicalSize<u32>,
-    paused:           bool,
+    run_state:        RunState,
 
     #[cfg(target_arch = "wasm32")]
     document: web_sys::Document,
@@ -103,11 +110,8 @@ impl AppState
         let next_frame_button = document.get_element_by_id("button_next_frame").unwrap().dyn_into::<web_sys::HtmlButtonElement>().unwrap();
         next_frame_button.set_onclick(Some(next_frame_function.as_ref().unchecked_ref()));
 
-        next_frame_button.set_disabled(true);
-
-
         let window_size = canvas_window.inner_size();
-        let paused      = false;
+        let run_state   = RunState::Running;
 
         Self
         {
@@ -115,7 +119,7 @@ impl AppState
             event_loop_proxy,
             canvas_window,
             window_size,
-            paused,
+            run_state,
 
             document,
 
@@ -137,14 +141,14 @@ impl AppState
         canvas_window.set_inner_size(winit::dpi::LogicalSize {width: 768.0, height: 768.0});
         let window_size = canvas_window.inner_size();
 
-        let paused = false;
+        let run_state = RunState::Running;
         Self
         {
             event_loop,
             event_loop_proxy,
             canvas_window,
             window_size,
-            paused
+            run_state
         }
     }
 
@@ -157,10 +161,13 @@ impl AppState
         let event_loop    = self.event_loop;
 
         let mut window_size = self.window_size;
-        let mut paused      = self.paused;
+        let mut run_state   = self.run_state;
 
         let mut state = stafra_state::StafraState::new(&canvas_window, stafra_state::BoardDimensions {width: 1023, height: 1023}).await;
         state.reset_board();
+
+        #[cfg(target_arch = "wasm32")]
+        AppState::update_ui(&document, run_state);
 
         event_loop.run(move |event, _, control_flow| match event
         {
@@ -193,7 +200,7 @@ impl AppState
 
             Event::RedrawRequested(_) =>
             {
-                if !paused
+                if run_state == RunState::Running
                 {
                     state.update();
                 }
@@ -267,37 +274,25 @@ impl AppState
 
                     AppEvent::SwitchPlayPause {} =>
                     {
-                        #[cfg(target_arch = "wasm32")]
+                        if run_state == RunState::Running
                         {
-                            let play_pause_button = document.get_element_by_id("button_play_pause").unwrap().dyn_into::<web_sys::HtmlButtonElement>().unwrap();
-                            if paused
-                            {
-                                play_pause_button.set_text_content(Some("⏸️"));
-                            }
-                            else
-                            {
-                                play_pause_button.set_text_content(Some("▶️"));
-                            }
-
-                            let next_frame_button = document.get_element_by_id("button_next_frame").unwrap().dyn_into::<web_sys::HtmlButtonElement>().unwrap();
-                            next_frame_button.set_disabled(paused);
+                            run_state = RunState::Paused;
+                        }
+                        else
+                        {
+                            run_state = RunState::Running;
                         }
 
-                        paused = !paused;
+                        #[cfg(target_arch = "wasm32")]
+                        AppState::update_ui(&document, run_state);
                     }
 
                     AppEvent::Stop {} =>
                     {
-                        paused = true;
+                        run_state = RunState::Stopped;
 
                         #[cfg(target_arch = "wasm32")]
-                        {
-                            let play_pause_button = document.get_element_by_id("button_play_pause").unwrap().dyn_into::<web_sys::HtmlButtonElement>().unwrap();
-                            play_pause_button.set_text_content(Some("▶️"));
-
-                            let next_frame_button = document.get_element_by_id("button_next_frame").unwrap().dyn_into::<web_sys::HtmlButtonElement>().unwrap();
-                            next_frame_button.set_disabled(false);
-                        }
+                        AppState::update_ui(&document, run_state);
 
                         state.reset_board();
                         canvas_window.request_redraw();
@@ -305,7 +300,7 @@ impl AppState
 
                     AppEvent::NextFrame {} =>
                     {
-                        if paused
+                        if run_state != RunState::Running
                         {
                             state.update();
                         }
@@ -315,5 +310,25 @@ impl AppState
 
             _ => {}
         });
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    fn update_ui(document: &web_sys::Document, run_state: RunState)
+    {
+        let play_pause_button = document.get_element_by_id("button_play_pause").unwrap().dyn_into::<web_sys::HtmlButtonElement>().unwrap();
+        if run_state == RunState::Running
+        {
+            play_pause_button.set_text_content(Some("⏸️"));
+        }
+        else
+        {
+            play_pause_button.set_text_content(Some("▶️"));
+        }
+
+        let next_frame_button = document.get_element_by_id("button_next_frame").unwrap().dyn_into::<web_sys::HtmlButtonElement>().unwrap();
+        next_frame_button.set_disabled(run_state == RunState::Running);
+
+        let initial_board_select = document.get_element_by_id("initial_states").unwrap().dyn_into::<web_sys::HtmlSelectElement>().unwrap();
+        initial_board_select.set_disabled(run_state != RunState::Stopped);
     }
 }

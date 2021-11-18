@@ -25,7 +25,18 @@
             <div id="left_part">
                 <canvas id="STAFRA_canvas" width="768" height="768"></canvas>
             </div>
+
             <div id="right_part">
+                <div id="initial_state_menu">
+                    <label for="initial_states">Initial state: </label>
+                    <select id="initial_states">
+                        <option value="initial_state_corners" selected>Corners</option>
+                        <option value="initial_state_sides">Sides</option>
+                        <option value="initial_state_center">Center</option>
+                        <option value="initial_state_custom">Custom...</option>
+                    </select>
+                </div>
+
                 <div id="control_buttons">
                     <button id="button_stop">⏹️</button>
                     <button id="button_play_pause">⏸️</button>

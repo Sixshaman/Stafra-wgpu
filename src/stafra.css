@@ -13,7 +13,25 @@
 
 #right_part
 {
-    display:               flex;
-    flex-direction:        column;
-    grid-template-columns: 3em 3em 3em;
+    display:        flex;
+    flex-direction: column;
+}
+
+#initial_state_menu
+{
+    display:        flex;
+    flex-direction: row;
+}
+
+#control_buttons
+{
+  display:               grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  margin-top:            2em;
+}
+
+#initial_states
+{
+    height: auto;
+    margin-left: 0.5em;
 }
