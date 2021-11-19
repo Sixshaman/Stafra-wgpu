@@ -21,6 +21,16 @@ struct SavePngRequest
     row_pitch:       usize
 }
 
+#[derive(Copy, Clone, PartialEq)]
+pub enum ResetBoardType
+{
+    Corners,
+    Edges,
+    Center,
+    Custom,
+    Unchanged
+}
+
 pub struct StafraState
 {
     surface: wgpu::Surface,
@@ -952,7 +962,7 @@ impl StafraState
         }
     }
 
-    pub fn reset_board(&mut self)
+    pub fn reset_board(&mut self, reset_type: ResetBoardType)
     {
         let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor{label: None});
 

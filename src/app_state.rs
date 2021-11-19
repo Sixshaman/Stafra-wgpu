@@ -15,6 +15,7 @@ use
 use wasm_bindgen::{JsCast, Clamped};
 use std::rc::Rc;
 use super::stafra_state;
+use crate::stafra_state::{StafraState, ResetBoardType};
 
 #[derive(Copy, Clone, PartialEq)]
 enum RunState
@@ -46,6 +47,9 @@ pub struct AppState
 
     #[cfg(target_arch = "wasm32")]
     next_frame_function: Closure<dyn Fn()>,
+
+    #[cfg(target_arch = "wasm32")]
+    reset_board_function: Closure<dyn Fn(web_sys::Event)>,
 }
 
 enum AppEvent
@@ -53,7 +57,12 @@ enum AppEvent
     SavePng {},
     SwitchPlayPause {},
     Stop {},
-    NextFrame {}
+    NextFrame {},
+
+    ResetBoard
+    {
+        reset_type: ResetBoardType
+    }
 }
 
 impl AppState
@@ -110,6 +119,24 @@ impl AppState
         let next_frame_button = document.get_element_by_id("button_next_frame").unwrap().dyn_into::<web_sys::HtmlButtonElement>().unwrap();
         next_frame_button.set_onclick(Some(next_frame_function.as_ref().unchecked_ref()));
 
+
+        let event_loop_reset_board = event_loop_proxy.clone();
+        let reset_board_function = Closure::wrap(Box::new(move |event: web_sys::Event|
+        {
+            match event.target().unwrap().dyn_into::<web_sys::HtmlSelectElement>().unwrap().value().as_str()
+            {
+                "initial_state_corners" => {event_loop_reset_board.send_event(AppEvent::ResetBoard {reset_type: ResetBoardType::Corners});}
+                "initial_state_sides"   => {event_loop_reset_board.send_event(AppEvent::ResetBoard {reset_type: ResetBoardType::Edges});}
+                "initial_state_center"  => {event_loop_reset_board.send_event(AppEvent::ResetBoard {reset_type: ResetBoardType::Center});}
+                "initial_state_custom"  => {event_loop_reset_board.send_event(AppEvent::ResetBoard {reset_type: ResetBoardType::Custom});}
+                _                       => {}
+            };
+        }) as Box<dyn Fn(web_sys::Event)>);
+
+        let initial_state_select = document.get_element_by_id("initial_states").unwrap().dyn_into::<web_sys::HtmlSelectElement>().unwrap();
+        initial_state_select.set_onchange(Some(reset_board_function.as_ref().unchecked_ref()));
+
+
         let window_size = canvas_window.inner_size();
         let run_state   = RunState::Running;
 
@@ -126,7 +153,8 @@ impl AppState
             save_png_function,
             play_pause_function,
             stop_function,
-            next_frame_function
+            next_frame_function,
+            reset_board_function
         }
     }
 
@@ -163,8 +191,8 @@ impl AppState
         let mut window_size = self.window_size;
         let mut run_state   = self.run_state;
 
-        let mut state = stafra_state::StafraState::new(&canvas_window, stafra_state::BoardDimensions {width: 1023, height: 1023}).await;
-        state.reset_board();
+        let mut main_state = stafra_state::StafraState::new(&canvas_window, stafra_state::BoardDimensions {width: 1023, height: 1023}).await;
+        AppState::reset_board(&mut main_state, &canvas_window, ResetBoardType::Corners);
 
         #[cfg(target_arch = "wasm32")]
         AppState::update_ui(&document, run_state);
@@ -186,13 +214,13 @@ impl AppState
                 WindowEvent::Resized(physical_size) =>
                 {
                     window_size = *physical_size;
-                    state.resize(&window_size);
+                    main_state.resize(&window_size);
                 }
 
                 WindowEvent::ScaleFactorChanged {new_inner_size, ..} =>
                 {
                     window_size = **new_inner_size;
-                    state.resize(&window_size);
+                    main_state.resize(&window_size);
                 }
 
                 _ => {}
@@ -202,10 +230,10 @@ impl AppState
             {
                 if run_state == RunState::Running
                 {
-                    state.update();
+                    main_state.update();
                 }
 
-                match state.check_png_data_request()
+                match main_state.check_png_data_request()
                 {
                     Ok((mut image_array, size, row_pitch)) =>
                     {
@@ -232,7 +260,7 @@ impl AppState
                     }
                 }
 
-                match state.render()
+                match main_state.render()
                 {
                     Ok(_) =>
                     {
@@ -240,7 +268,7 @@ impl AppState
 
                     Err(wgpu::SurfaceError::Lost) =>
                     {
-                        state.resize(&window_size);
+                        main_state.resize(&window_size);
                     }
 
                     Err(wgpu::SurfaceError::OutOfMemory) =>
@@ -268,7 +296,7 @@ impl AppState
                     {
                         #[cfg(target_arch = "wasm32")]
                         {
-                            state.post_png_data_request();
+                            main_state.post_png_data_request();
                         }
                     }
 
@@ -294,16 +322,20 @@ impl AppState
                         #[cfg(target_arch = "wasm32")]
                         AppState::update_ui(&document, run_state);
 
-                        state.reset_board();
-                        canvas_window.request_redraw();
+                        AppState::reset_board(&mut main_state, &canvas_window, ResetBoardType::Unchanged);
                     },
 
                     AppEvent::NextFrame {} =>
                     {
                         if run_state != RunState::Running
                         {
-                            state.update();
+                            main_state.update();
                         }
+                    }
+
+                    AppEvent::ResetBoard {reset_type} =>
+                    {
+                        AppState::reset_board(&mut main_state, &canvas_window, reset_type);
                     }
                 }
             }
@@ -330,5 +362,11 @@ impl AppState
 
         let initial_board_select = document.get_element_by_id("initial_states").unwrap().dyn_into::<web_sys::HtmlSelectElement>().unwrap();
         initial_board_select.set_disabled(run_state != RunState::Stopped);
+    }
+
+    fn reset_board(state: &mut StafraState, window: &Window, reset_type: ResetBoardType)
+    {
+        state.reset_board(reset_type);
+        window.request_redraw();
     }
 }
