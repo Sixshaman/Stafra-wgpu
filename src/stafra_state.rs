@@ -45,6 +45,8 @@ pub struct StafraState
 
     render_state_pipeline:            wgpu::RenderPipeline,
     clear_4_corners_pipeline:         wgpu::ComputePipeline,
+    clear_4_sides_pipeline:           wgpu::ComputePipeline,
+    clear_center_pipeline:            wgpu::ComputePipeline,
     initial_state_transform_pipeline: wgpu::ComputePipeline,
     final_state_transform_pipeline:   wgpu::ComputePipeline,
     clear_stability_pipeline:         wgpu::ComputePipeline,
@@ -52,7 +54,7 @@ pub struct StafraState
     generate_mip_pipeline:            wgpu::ComputePipeline,
 
     render_state_bind_group:      wgpu::BindGroup,
-    clear_4_corners_bind_group:   wgpu::BindGroup,
+    clear_default_bind_group:     wgpu::BindGroup,
     next_step_bind_group_a:       wgpu::BindGroup,
     next_step_bind_group_b:       wgpu::BindGroup,
     final_transform_bind_group_a: wgpu::BindGroup,
@@ -62,6 +64,7 @@ pub struct StafraState
     generate_mip_bind_groups:     Vec<wgpu::BindGroup>,
 
     save_png_request: Option<SavePngRequest>,
+    last_reset_type:  ResetBoardType,
 
     #[allow(dead_code)]
     current_board:     wgpu::Texture,
@@ -121,6 +124,8 @@ impl StafraState
         let render_state_fs_module = device.create_shader_module(&wgpu::include_spirv!("../target/shaders/render_state_fs.spv"));
 
         let clear_4_corners_module = device.create_shader_module(&wgpu::include_spirv!("../target/shaders/clear_4_corners.spv"));
+        let clear_4_sides_module   = device.create_shader_module(&wgpu::include_spirv!("../target/shaders/clear_4_sides.spv"));
+        let clear_center_module    = device.create_shader_module(&wgpu::include_spirv!("../target/shaders/clear_center.spv"));
 
         let initial_state_transform_module = device.create_shader_module(&wgpu::include_spirv!("../target/shaders/initial_state_transform.spv"));
 
@@ -273,7 +278,7 @@ impl StafraState
             ]
         });
 
-        let clear_4_corners_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor
+        let clear_default_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor
         {
             label: None,
             entries:
@@ -341,10 +346,10 @@ impl StafraState
             push_constant_ranges: &[],
         });
 
-        let clear_4_corners_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor
+        let clear_default_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor
         {
             label: None,
-            bind_group_layouts: &[&clear_4_corners_bind_group_layout],
+            bind_group_layouts: &[&clear_default_bind_group_layout],
             push_constant_ranges: &[]
         });
 
@@ -429,8 +434,24 @@ impl StafraState
         let clear_4_corners_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor
         {
             label:       None,
-            layout:      Some(&clear_4_corners_pipeline_layout),
+            layout:      Some(&clear_default_pipeline_layout),
             module:      &clear_4_corners_module,
+            entry_point: "main"
+        });
+
+        let clear_4_sides_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor
+        {
+            label:       None,
+            layout:      Some(&clear_default_pipeline_layout),
+            module:      &clear_4_sides_module,
+            entry_point: "main"
+        });
+
+        let clear_center_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor
+        {
+            label:       None,
+            layout:      Some(&clear_default_pipeline_layout),
+            module:      &clear_center_module,
             entry_point: "main"
         });
 
@@ -595,10 +616,10 @@ impl StafraState
             ]
         });
 
-        let clear_4_corners_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor
+        let clear_default_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor
         {
             label: None,
-            layout: &clear_4_corners_bind_group_layout,
+            layout: &clear_default_bind_group_layout,
             entries:
             &[
                 wgpu::BindGroupEntry
@@ -779,6 +800,8 @@ impl StafraState
 
             render_state_pipeline,
             clear_4_corners_pipeline,
+            clear_4_sides_pipeline,
+            clear_center_pipeline,
             initial_state_transform_pipeline,
             final_state_transform_pipeline,
             next_step_pipeline,
@@ -787,7 +810,7 @@ impl StafraState
             generate_mip_bind_groups,
 
             render_state_bind_group,
-            clear_4_corners_bind_group,
+            clear_default_bind_group,
             next_step_bind_group_a,
             next_step_bind_group_b,
             final_transform_bind_group_a,
@@ -796,6 +819,7 @@ impl StafraState
             clear_stability_bind_group_b,
 
             save_png_request: None,
+            last_reset_type:  ResetBoardType::Corners,
 
             current_board,
             next_board,
@@ -975,7 +999,7 @@ impl StafraState
 
         self.frame_number = 0;
 
-        self.clear_stability(&mut encoder);
+        self.clear_stability(&mut encoder, reset_type);
         self.generate_final_image(&mut encoder);
 
         self.queue.submit(std::iter::once(encoder.finish()));
@@ -1076,17 +1100,42 @@ impl StafraState
         }
     }
 
-    fn clear_stability(&self, encoder: &mut wgpu::CommandEncoder)
+    fn clear_stability(&mut self, encoder: &mut wgpu::CommandEncoder, reset_type: ResetBoardType)
     {
         let thread_groups_x = std::cmp::max((self.board_size.width + 1) / (2 * 16), 1u32);
         let thread_groups_y = std::cmp::max((self.board_size.width + 1) / (2 * 16), 1u32);
 
+        let used_reset_type = if reset_type == ResetBoardType::Unchanged { self.last_reset_type } else { reset_type };
+
         {
             let mut reset_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {label: None});
 
-            reset_pass.set_pipeline(&self.clear_4_corners_pipeline);
-            reset_pass.set_bind_group(0, &self.clear_4_corners_bind_group, &[]);
+            match used_reset_type
+            {
+                ResetBoardType::Corners =>
+                {
+                    reset_pass.set_pipeline(&self.clear_4_corners_pipeline);
+                    reset_pass.set_bind_group(0, &self.clear_default_bind_group, &[]);
+                },
+
+                ResetBoardType::Edges =>
+                {
+                    reset_pass.set_pipeline(&self.clear_4_sides_pipeline);
+                    reset_pass.set_bind_group(0, &self.clear_default_bind_group, &[]);
+                },
+
+                ResetBoardType::Center =>
+                {
+                    reset_pass.set_pipeline(&self.clear_center_pipeline);
+                    reset_pass.set_bind_group(0, &self.clear_default_bind_group, &[]);
+                },
+
+                _ => {}
+            }
+
             reset_pass.dispatch(thread_groups_x, thread_groups_y, 1);
+
+            self.last_reset_type = used_reset_type;
         }
 
         {

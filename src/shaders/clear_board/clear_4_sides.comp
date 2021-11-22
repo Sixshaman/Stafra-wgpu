@@ -1,0 +1,30 @@
+#version 450
+
+layout(local_size_x = 16, local_size_y = 16) in;
+
+layout(set = 0, binding = 0, r32ui) uniform writeonly uimage2D outInitialBoard;
+
+void main()
+{
+    ivec2 boardSize = imageSize(outInitialBoard);
+
+    uvec2 centerLeft   = uvec2(0,                     (boardSize.y - 1) / 2);
+    uvec2 centerTop    = uvec2((boardSize.x - 1) / 2,  0);
+    uvec2 centerRight  = uvec2( boardSize.x - 1,      (boardSize.y - 1) / 2);
+    uvec2 centerBottom = uvec2((boardSize.x - 1) / 2,  boardSize.y - 1);
+
+    uint insideHorizontal = uint((gl_GlobalInvocationID.xy == centerLeft) || (gl_GlobalInvocationID.xy == centerRight));
+    uint insideVertical   = uint((gl_GlobalInvocationID.xy == centerTop)  || (gl_GlobalInvocationID.xy == centerBottom));
+
+    //Each thread processes a single 2x2 quad. The quad is packed into uint32:
+    // (Bits 0-7)   (Bits 8-15)
+    // (Bits 16-23) (Bits 24-31)
+    //Top and bottom centers correspond to the top-right flag of the corresponding center quads
+    //Left and right centers correspond to the bottom-left flag of the corresponding center quads
+    //1x1 boards are exception and their centers correspond to the top-left flag
+    uint is1x1 = uint(boardSize == uvec2(1, 1));
+    uint inSideCenterQuadValues = (is1x1 << 0u)             | (insideVertical << 8u)
+                                | (insideHorizontal << 16u) | (0u << 24u);
+
+    imageStore(outInitialBoard, ivec2(gl_GlobalInvocationID.xy), uvec4(inSideCenterQuadValues));
+}

@@ -20,7 +20,9 @@ void main()
 	//Pack a uint32-encoded quad:
 	// (Bits 0-7)   (Bits 8-15)
 	// (Bits 16-23) (Bits 24-31)
-	//Since the board size is 2^n - 1, each corner 2x2 quad corresponds only to the top-left value of encoded quad
+	//The uvec4(inCorner) operation creates a quad with a possible top-left flag.
+	//Luckily, for all for corners it correctly creates a corresponding value, because
+	//the board size is 2^n - 1, and each corner 2x2 quad corresponds only to the top-left value of encoded quad
 	uint inCorner = uint(any(inCornerQuadValues));
     imageStore(outInitialBoard, ivec2(gl_GlobalInvocationID.xy), uvec4(inCorner));
 }

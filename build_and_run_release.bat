@@ -13,6 +13,8 @@ echo F|xcopy /Y /F "../src/stafra.css" "./stafra.css"
 set RUSTFLAGS=--cfg=web_sys_unstable_apis
 
 %VULKAN_SDK%/Bin/glslangValidator -V --target-env spirv1.3 -g -o ../target/shaders/clear_4_corners.spv ../src/shaders/clear_board/clear_4_corners.comp
+%VULKAN_SDK%/Bin/glslangValidator -V --target-env spirv1.3 -g -o ../target/shaders/clear_4_sides.spv   ../src/shaders/clear_board/clear_4_sides.comp
+%VULKAN_SDK%/Bin/glslangValidator -V --target-env spirv1.3 -g -o ../target/shaders/clear_center.spv    ../src/shaders/clear_board/clear_center.comp
 
 %VULKAN_SDK%/Bin/glslangValidator -V --target-env spirv1.3 -g -o ../target/shaders/next_step.spv ../src/shaders/next_step/next_step.comp
 
