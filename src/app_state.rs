@@ -252,7 +252,7 @@ impl AppState
         let mut window_size = self.window_size;
         let mut run_state   = self.run_state;
 
-        let mut main_state = stafra_state::StafraState::new(&canvas_window, stafra_state::BoardDimensions {width: 1023, height: 1023}).await;
+        let mut main_state = stafra_state::StafraState::new(&canvas_window, 1023, 1023).await;
         AppState::reset_board_standard(&mut main_state, &canvas_window, ResetBoardType::Corners);
 
         #[cfg(target_arch = "wasm32")]
@@ -297,13 +297,13 @@ impl AppState
                 #[cfg(target_arch = "wasm32")]
                 match main_state.check_png_data_request()
                 {
-                    Ok((mut image_array, size, row_pitch)) =>
+                    Ok((mut image_array, width, height, row_pitch)) =>
                     {
                         let image_data = web_sys::ImageData::new_with_u8_clamped_array(Clamped(image_array.as_mut_slice()), row_pitch).unwrap();
 
                         let canvas = document.create_element("canvas").unwrap().dyn_into::<web_sys::HtmlCanvasElement>().unwrap();
-                        canvas.set_width(size.width);
-                        canvas.set_height(size.height);
+                        canvas.set_width(width);
+                        canvas.set_height(height);
 
                         let canvas_context = canvas.get_context("2d").unwrap().unwrap().dyn_into::<web_sys::CanvasRenderingContext2d>().unwrap();
                         canvas_context.put_image_data(&image_data, 0.0, 0.0);
@@ -455,9 +455,7 @@ impl AppState
     #[cfg(target_arch = "wasm32")]
     fn reset_board_custom(state: &mut StafraState, window: &Window, image_data: web_sys::ImageData)
     {
-
-
-        state.reset_board_custom();
+        state.reset_board_custom(image_data.data().to_vec(), image_data.width(), image_data.height());
         window.request_redraw();
     }
 }
