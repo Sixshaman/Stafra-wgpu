@@ -1,11 +1,9 @@
 use futures::Future;
 use std::num::NonZeroU32;
 use winit::window::Window;
-use std::convert::TryInto;
 use std::pin::Pin;
 use std::task::Context;
 use super::dummy_waker;
-use image::EncodableLayout;
 
 #[derive(Copy, Clone)]
 pub struct BoardDimensions
@@ -27,7 +25,6 @@ pub enum ResetBoardType
     Corners,
     Edges,
     Center,
-    Custom,
     Unchanged
 }
 
@@ -182,11 +179,7 @@ impl StafraState
                 {
                     binding:    $bd,
                     visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty:         wgpu::BindingType::Sampler
-                    {
-                        filtering:  true,
-                        comparison: false,
-                    },
+                    ty:         wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
                     count: None
                 }
             }
@@ -423,12 +416,13 @@ impl StafraState
                 strip_index_format: None,
                 front_face:         wgpu::FrontFace::Cw,
                 cull_mode:          None,
-                clamp_depth:        false,
+                unclipped_depth:    true,
                 polygon_mode:       wgpu::PolygonMode::Fill,
                 conservative:       false
             },
 
             multisample: wgpu::MultisampleState::default(),
+            multiview: None
         });
 
         let clear_4_corners_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor
@@ -999,7 +993,26 @@ impl StafraState
 
         self.frame_number = 0;
 
-        self.clear_stability(&mut encoder, reset_type);
+        self.clear_stability_standard(&mut encoder, reset_type);
+        self.generate_final_image(&mut encoder);
+
+        self.queue.submit(std::iter::once(encoder.finish()));
+    }
+
+    pub fn reset_board_custom(&mut self)
+    {
+        let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor{label: None});
+
+        if self.frame_number % 2 == 1
+        {
+            //Make sure we're clearing the right one
+            std::mem::swap(&mut self.next_step_bind_group_a, &mut self.next_step_bind_group_b);
+            std::mem::swap(&mut self.final_transform_bind_group_a, &mut self.final_transform_bind_group_b);
+        }
+
+        self.frame_number = 0;
+
+        self.clear_stability_custom(&mut encoder);
         self.generate_final_image(&mut encoder);
 
         self.queue.submit(std::iter::once(encoder.finish()));
@@ -1100,7 +1113,7 @@ impl StafraState
         }
     }
 
-    fn clear_stability(&mut self, encoder: &mut wgpu::CommandEncoder, reset_type: ResetBoardType)
+    fn clear_stability_standard(&mut self, encoder: &mut wgpu::CommandEncoder, reset_type: ResetBoardType)
     {
         let thread_groups_x = std::cmp::max((self.board_size.width + 1) / (2 * 16), 1u32);
         let thread_groups_y = std::cmp::max((self.board_size.width + 1) / (2 * 16), 1u32);
@@ -1137,6 +1150,22 @@ impl StafraState
 
             self.last_reset_type = used_reset_type;
         }
+
+        self.clear_stability(encoder);
+    }
+
+    fn clear_stability_custom(&mut self, encoder: &mut wgpu::CommandEncoder)
+    {
+        let thread_groups_x = std::cmp::max((self.board_size.width + 1) / (2 * 16), 1u32);
+        let thread_groups_y = std::cmp::max((self.board_size.width + 1) / (2 * 16), 1u32);
+
+        self.clear_stability(encoder);
+    }
+
+    fn clear_stability(&self, encoder: &mut wgpu::CommandEncoder)
+    {
+        let thread_groups_x = std::cmp::max((self.board_size.width + 1) / (2 * 16), 1u32);
+        let thread_groups_y = std::cmp::max((self.board_size.width + 1) / (2 * 16), 1u32);
 
         {
             let mut clear_stability_pass_a = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {label: None});

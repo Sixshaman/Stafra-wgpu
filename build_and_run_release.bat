@@ -27,7 +27,7 @@ set RUSTFLAGS=--cfg=web_sys_unstable_apis
 
 %VULKAN_SDK%/Bin/glslangValidator -V --target-env spirv1.3 -g -o ../target/shaders/final_state_generate_next_mip.spv ../src/shaders/mip/final_state_generate_next_mip.comp
 
-wasm-pack build --release --target web --out-name Stafra --out-dir static -- --features winit/web-sys
+wasm-pack build --release --target web --out-name Stafra --out-dir static
 miniserve --index stafra.html
 
 set RUSTFLAGS=

@@ -4,7 +4,7 @@ cd static
 
 set RUSTFLAGS=--cfg=web_sys_unstable_apis
 
-wasm-pack build --release --target web --out-name Stafra --out-dir static -- --features winit/web-sys
+wasm-pack build --release --target web --out-name Stafra --out-dir static
 
 set RUSTFLAGS=
 cd ..
