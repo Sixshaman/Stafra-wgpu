@@ -15,7 +15,7 @@ use
 
 use std::rc::Rc;
 use super::stafra_state;
-use crate::stafra_state::{StafraState, ResetBoardType};
+use crate::stafra_state::{StafraState, StandardResetBoardType};
 
 #[derive(Copy, Clone, PartialEq)]
 enum RunState
@@ -165,12 +165,32 @@ impl AppState
         let board_upload_reader = web_sys::FileReader::new().unwrap();
         board_upload_reader.set_onload(Some(board_upload_file_function.as_ref().unchecked_ref()));
 
+        let board_reset_select_with_custom = document.get_element_by_id("initial_states").unwrap().dyn_into::<web_sys::HtmlSelectElement>().unwrap();
+
+        let mut board_reset_custom_option_index   = 0;
+        while let Some(board_reset_custom_option) = board_reset_select_with_custom.options().item(board_reset_custom_option_index)
+        {
+            let option_element = board_reset_custom_option.dyn_into::<web_sys::HtmlOptionElement>().unwrap();
+            if option_element.value() == "initial_state_custom_value"
+            {
+                break;
+            }
+
+            board_reset_custom_option_index  += 1;
+        }
+
         let reset_board_custom_function = Closure::wrap(Box::new(move |event: web_sys::Event|
         {
             let input_files = event.target().unwrap().dyn_into::<web_sys::HtmlInputElement>().unwrap().files().unwrap();
             if input_files.length() > 0
             {
                 let image_file = input_files.item(0).unwrap();
+
+                let filename = image_file.name();
+                let custom_option_element = board_reset_select_with_custom.options().item(board_reset_custom_option_index).unwrap().dyn_into::<web_sys::HtmlOptionElement>().unwrap();
+                custom_option_element.set_text(&filename);
+
+                board_reset_select_with_custom.set_selected_index(board_reset_custom_option_index as i32);
                 board_upload_reader.read_as_data_url(&image_file);
             }
         }) as Box<dyn Fn(web_sys::Event)>);
@@ -253,7 +273,7 @@ impl AppState
         let mut run_state   = self.run_state;
 
         let mut main_state = stafra_state::StafraState::new(&canvas_window, 1023, 1023).await;
-        AppState::reset_board_standard(&mut main_state, &canvas_window, ResetBoardType::Corners);
+        AppState::reset_board_standard(&mut main_state, &canvas_window, StandardResetBoardType::Corners);
 
         #[cfg(target_arch = "wasm32")]
         AppState::update_ui(&document, run_state);
@@ -384,7 +404,7 @@ impl AppState
                         #[cfg(target_arch = "wasm32")]
                         AppState::update_ui(&document, run_state);
 
-                        AppState::reset_board_standard(&mut main_state, &canvas_window, ResetBoardType::Unchanged);
+                        AppState::reset_board_unchanged(&mut main_state, &canvas_window);
                     },
 
                     AppEvent::NextFrame {} =>
@@ -398,17 +418,35 @@ impl AppState
                     AppEvent::ResetBoard {reset_option} =>
                     {
                         #[cfg(target_arch = "wasm32")]
-                        match reset_option
                         {
-                            ResetOption::Corners => {AppState::reset_board_standard(&mut main_state, &canvas_window, ResetBoardType::Corners);},
-                            ResetOption::Sides   => {AppState::reset_board_standard(&mut main_state, &canvas_window, ResetBoardType::Edges);},
-                            ResetOption::Center  => {AppState::reset_board_standard(&mut main_state, &canvas_window, ResetBoardType::Center);},
-
-                            ResetOption::Custom =>
+                            match reset_option
                             {
-                                let initial_state_upload_input = document.get_element_by_id("board_input").unwrap().dyn_into::<web_sys::HtmlInputElement>().unwrap();
-                                initial_state_upload_input.click();
+                                ResetOption::Corners =>
+                                {
+                                    AppState::reset_board_standard(&mut main_state, &canvas_window, StandardResetBoardType::Corners);
+                                    run_state = RunState::Running;
+                                },
+
+                                ResetOption::Sides =>
+                                {
+                                    AppState::reset_board_standard(&mut main_state, &canvas_window, StandardResetBoardType::Edges);
+                                    run_state = RunState::Running;
+                                },
+
+                                ResetOption::Center =>
+                                {
+                                    AppState::reset_board_standard(&mut main_state, &canvas_window, StandardResetBoardType::Center);
+                                    run_state = RunState::Running;
+                                },
+
+                                ResetOption::Custom =>
+                                {
+                                    let initial_state_upload_input = document.get_element_by_id("board_input").unwrap().dyn_into::<web_sys::HtmlInputElement>().unwrap();
+                                    initial_state_upload_input.click();
+                                }
                             }
+
+                            AppState::update_ui(&document, run_state);
                         }
                     }
 
@@ -417,6 +455,10 @@ impl AppState
                         #[cfg(target_arch = "wasm32")]
                         {
                             AppState::reset_board_custom(&mut main_state, &canvas_window, image_data);
+
+                            run_state = RunState::Running;
+
+                            AppState::update_ui(&document, run_state);
                         }
                     }
                 }
@@ -446,9 +488,15 @@ impl AppState
         initial_board_select.set_disabled(run_state != RunState::Stopped);
     }
 
-    fn reset_board_standard(state: &mut StafraState, window: &Window, reset_type: ResetBoardType)
+    fn reset_board_unchanged(state: &mut StafraState, window: &Window)
     {
-        state.reset_board(reset_type);
+        state.reset_board_unchanged();
+        window.request_redraw();
+    }
+
+    fn reset_board_standard(state: &mut StafraState, window: &Window, reset_type: StandardResetBoardType)
+    {
+        state.reset_board_standard(reset_type);
         window.request_redraw();
     }
 

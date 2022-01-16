@@ -5,7 +5,6 @@ use std::pin::Pin;
 use std::task::Context;
 use super::dummy_waker;
 use std::cmp::min;
-use js_sys::Math::floor;
 
 #[derive(Copy, Clone)]
 struct BoardDimensions
@@ -41,6 +40,7 @@ struct StafraBindings
 
     render_state_bind_group:      wgpu::BindGroup,
     clear_default_bind_group:     wgpu::BindGroup,
+    initial_transform_bind_group: wgpu::BindGroup,
     next_step_bind_group_a:       wgpu::BindGroup,
     next_step_bind_group_b:       wgpu::BindGroup,
     final_transform_bind_group_a: wgpu::BindGroup,
@@ -49,6 +49,8 @@ struct StafraBindings
     clear_stability_bind_group_b: wgpu::BindGroup,
     generate_mip_bind_groups:     Vec<wgpu::BindGroup>,
 
+    #[allow(dead_code)]
+    initial_state:     wgpu::Texture,
     #[allow(dead_code)]
     current_board:     wgpu::Texture,
     #[allow(dead_code)]
@@ -62,12 +64,18 @@ struct StafraBindings
 }
 
 #[derive(Copy, Clone, PartialEq)]
-pub enum ResetBoardType
+pub enum StandardResetBoardType
 {
     Corners,
     Edges,
-    Center,
-    Unchanged
+    Center
+}
+
+#[derive(Copy, Clone, PartialEq)]
+enum ResetBoardType
+{
+    Standard {reset_type: StandardResetBoardType},
+    Custom
 }
 
 pub struct StafraState
@@ -77,7 +85,6 @@ pub struct StafraState
     queue:   wgpu::Queue,
 
     swapchain_format: wgpu::TextureFormat,
-
     frame_number: u32,
 
     render_state_pipeline:            wgpu::RenderPipeline,
@@ -340,6 +347,22 @@ impl StafraBindings
 
         let board_size = BoardDimensions {width, height};
 
+        let initial_state_texture_descriptor = wgpu::TextureDescriptor
+        {
+            label: None,
+            size:  wgpu::Extent3d
+            {
+                width:                 board_size.width,
+                height:                board_size.height,
+                depth_or_array_layers: 1
+            },
+            mip_level_count: 1,
+            sample_count:    1,
+            dimension:       wgpu::TextureDimension::D2,
+            format:          wgpu::TextureFormat::Rgba8Unorm,
+            usage:           wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST
+        };
+
         let board_texture_descriptor = wgpu::TextureDescriptor
         {
             label: None,
@@ -373,11 +396,24 @@ impl StafraBindings
             usage:           wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::STORAGE_BINDING | wgpu::TextureUsages::COPY_SRC
         };
 
+        let initial_state     = device.create_texture(&initial_state_texture_descriptor);
         let current_board     = device.create_texture(&board_texture_descriptor);
         let next_board        = device.create_texture(&board_texture_descriptor);
         let current_stability = device.create_texture(&board_texture_descriptor);
         let next_stability    = device.create_texture(&board_texture_descriptor);
         let final_state       = device.create_texture(&final_state_texture_descriptor);
+
+        let initial_state_view_descriptor = wgpu::TextureViewDescriptor
+        {
+            label:             None,
+            format:            Some(wgpu::TextureFormat::Rgba8Unorm),
+            dimension:         Some(wgpu::TextureViewDimension::D2),
+            aspect:            wgpu::TextureAspect::All,
+            base_mip_level:    0,
+            mip_level_count:   None,
+            base_array_layer:  0,
+            array_layer_count: None
+        };
 
         let board_view_descriptor = wgpu::TextureViewDescriptor
         {
@@ -403,6 +439,7 @@ impl StafraBindings
             array_layer_count: None
         };
 
+        let initial_state_view     = initial_state.create_view(&initial_state_view_descriptor);
         let current_board_view     = current_board.create_view(&board_view_descriptor);
         let next_board_view        = next_board.create_view(&board_view_descriptor);
         let current_stability_view = current_stability.create_view(&board_view_descriptor);
@@ -456,6 +493,26 @@ impl StafraBindings
                     binding: 0,
                     resource: wgpu::BindingResource::TextureView(&current_board_view),
                 },
+            ]
+        });
+
+        let initial_transform_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor
+        {
+            label: None,
+            layout: &binding_layouts.initial_state_transform_bind_group_layout,
+            entries:
+            &[
+                wgpu::BindGroupEntry
+                {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&initial_state_view)
+                },
+
+                wgpu::BindGroupEntry
+                {
+                    binding: 1,
+                    resource: wgpu::BindingResource::TextureView(&current_board_view)
+                }
             ]
         });
 
@@ -621,6 +678,7 @@ impl StafraBindings
 
             render_state_bind_group,
             clear_default_bind_group,
+            initial_transform_bind_group,
             next_step_bind_group_a,
             next_step_bind_group_b,
             final_transform_bind_group_a,
@@ -629,6 +687,7 @@ impl StafraBindings
             clear_stability_bind_group_b,
             generate_mip_bind_groups,
 
+            initial_state,
             current_board,
             next_board,
             current_stability,
@@ -860,7 +919,6 @@ impl StafraState
             queue,
 
             swapchain_format,
-
             frame_number: 0,
 
             render_state_pipeline,
@@ -874,7 +932,7 @@ impl StafraState
             generate_mip_pipeline,
 
             save_png_request: None,
-            last_reset_type:  ResetBoardType::Corners,
+            last_reset_type:  ResetBoardType::Standard{reset_type: StandardResetBoardType::Corners},
 
             binding_layouts,
             bindings
@@ -1036,23 +1094,26 @@ impl StafraState
         }
     }
 
-    pub fn reset_board(&mut self, reset_type: ResetBoardType)
+    pub fn reset_board_unchanged(&mut self)
     {
-        let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor{label: None});
-
-        if self.frame_number % 2 == 1
+        match self.last_reset_type
         {
-            //Make sure we're clearing the right one
-            std::mem::swap(&mut self.bindings.next_step_bind_group_a,       &mut self.bindings.next_step_bind_group_b);
-            std::mem::swap(&mut self.bindings.final_transform_bind_group_a, &mut self.bindings.final_transform_bind_group_b);
+            ResetBoardType::Standard {reset_type} =>
+            {
+                self.reset_board_standard_impl(reset_type);
+            }
+
+            ResetBoardType::Custom =>
+            {
+                self.reset_board_custom_impl();
+            }
         }
+    }
 
-        self.frame_number = 0;
-
-        self.clear_stability_standard(&mut encoder, reset_type);
-        self.generate_final_image(&mut encoder);
-
-        self.queue.submit(std::iter::once(encoder.finish()));
+    pub fn reset_board_standard(&mut self, reset_type: StandardResetBoardType)
+    {
+        self.reset_board_standard_impl(reset_type);
+        self.last_reset_type = ResetBoardType::Standard {reset_type};
     }
 
     pub fn reset_board_custom(&mut self, image_array: Vec<u8>, width: u32, height: u32)
@@ -1061,29 +1122,29 @@ impl StafraState
         let cropped_size = (min(width, height) + 2).next_power_of_two() / 2 - 1;
         self.bindings = StafraBindings::new(&self.device, &self.binding_layouts, cropped_size, cropped_size);
 
-        /*
         self.queue.write_texture(wgpu::ImageCopyTexture
         {
-            texture: self.current_board,
-
-        });
-        */
-
-        let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor{label: None});
-
-        if self.frame_number % 2 == 1
+            texture:   &self.bindings.initial_state,
+            mip_level: 0,
+            origin:    wgpu::Origin3d::ZERO,
+            aspect:    wgpu::TextureAspect::All
+        },
+        image_array.as_slice(),
+        wgpu::ImageDataLayout
         {
-            //Make sure we're clearing the right one
-            std::mem::swap(&mut self.bindings.next_step_bind_group_a,       &mut self.bindings.next_step_bind_group_b);
-            std::mem::swap(&mut self.bindings.final_transform_bind_group_a, &mut self.bindings.final_transform_bind_group_b);
-        }
+            offset:         0,
+            bytes_per_row:  NonZeroU32::new(width * 4),
+            rows_per_image: NonZeroU32::new(height)
+        },
+        wgpu::Extent3d
+        {
+            width:                 cropped_size,
+            height:                cropped_size,
+            depth_or_array_layers: 1
+        });
 
-        self.frame_number = 0;
-
-        self.clear_stability_custom(&mut encoder);
-        self.generate_final_image(&mut encoder);
-
-        self.queue.submit(std::iter::once(encoder.finish()));
+        self.reset_board_custom_impl();
+        self.last_reset_type = ResetBoardType::Custom;
     }
 
     pub fn update(&mut self)
@@ -1181,53 +1242,83 @@ impl StafraState
         }
     }
 
-    fn clear_stability_standard(&mut self, encoder: &mut wgpu::CommandEncoder, reset_type: ResetBoardType)
+    fn reset_board_standard_impl(&mut self, reset_type: StandardResetBoardType)
     {
         let thread_groups_x = std::cmp::max((self.bindings.board_size.width + 1) / (2 * 16), 1u32);
         let thread_groups_y = std::cmp::max((self.bindings.board_size.width + 1) / (2 * 16), 1u32);
 
-        let used_reset_type = if reset_type == ResetBoardType::Unchanged { self.last_reset_type } else { reset_type };
+        let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor{label: None});
+
+        if self.frame_number % 2 == 1
+        {
+            //Make sure we're clearing the right one
+            std::mem::swap(&mut self.bindings.next_step_bind_group_a,       &mut self.bindings.next_step_bind_group_b);
+            std::mem::swap(&mut self.bindings.final_transform_bind_group_a, &mut self.bindings.final_transform_bind_group_b);
+        }
+
+        self.frame_number = 0;
 
         {
             let mut reset_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {label: None});
-
-            match used_reset_type
+            match reset_type
             {
-                ResetBoardType::Corners =>
+                StandardResetBoardType::Corners =>
                 {
                     reset_pass.set_pipeline(&self.clear_4_corners_pipeline);
                     reset_pass.set_bind_group(0, &self.bindings.clear_default_bind_group, &[]);
                 },
 
-                ResetBoardType::Edges =>
+                StandardResetBoardType::Edges =>
                 {
                     reset_pass.set_pipeline(&self.clear_4_sides_pipeline);
                     reset_pass.set_bind_group(0, &self.bindings.clear_default_bind_group, &[]);
                 },
 
-                ResetBoardType::Center =>
+                StandardResetBoardType::Center =>
                 {
                     reset_pass.set_pipeline(&self.clear_center_pipeline);
                     reset_pass.set_bind_group(0, &self.bindings.clear_default_bind_group, &[]);
-                },
-
-                _ => {}
+                }
             }
 
             reset_pass.dispatch(thread_groups_x, thread_groups_y, 1);
-
-            self.last_reset_type = used_reset_type;
         }
 
-        self.clear_stability(encoder);
+        self.clear_stability(&mut encoder);
+        self.generate_final_image(&mut encoder);
+
+        self.queue.submit(std::iter::once(encoder.finish()));
     }
 
-    fn clear_stability_custom(&mut self, encoder: &mut wgpu::CommandEncoder)
+    fn reset_board_custom_impl(&mut self)
     {
         let thread_groups_x = std::cmp::max((self.bindings.board_size.width + 1) / (2 * 16), 1u32);
         let thread_groups_y = std::cmp::max((self.bindings.board_size.width + 1) / (2 * 16), 1u32);
 
-        self.clear_stability(encoder);
+        let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor{label: None});
+
+        if self.frame_number % 2 == 1
+        {
+            //Make sure we're clearing the right one
+            std::mem::swap(&mut self.bindings.next_step_bind_group_a,       &mut self.bindings.next_step_bind_group_b);
+            std::mem::swap(&mut self.bindings.final_transform_bind_group_a, &mut self.bindings.final_transform_bind_group_b);
+        }
+
+        self.frame_number = 0;
+
+        {
+            let mut initial_transform_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {label: None});
+
+            initial_transform_pass.set_pipeline(&self.initial_state_transform_pipeline);
+            initial_transform_pass.set_bind_group(0, &self.bindings.initial_transform_bind_group, &[]);
+
+            initial_transform_pass.dispatch(thread_groups_x, thread_groups_y, 1);
+        }
+
+        self.clear_stability(&mut encoder);
+        self.generate_final_image(&mut encoder);
+
+        self.queue.submit(std::iter::once(encoder.finish()));
     }
 
     fn clear_stability(&self, encoder: &mut wgpu::CommandEncoder)
