@@ -1,5 +1,5 @@
 use futures::Future;
-use std::num::NonZeroU32;
+use std::num::{NonZeroU32, NonZeroU64};
 use winit::window::Window;
 use std::pin::Pin;
 use std::task::Context;
@@ -24,6 +24,7 @@ struct StafraBindingLayouts
 {
     render_state_bind_group_layout:            wgpu::BindGroupLayout,
     clear_default_bind_group_layout:           wgpu::BindGroupLayout,
+    bake_click_rule_bind_group_layout:         wgpu::BindGroupLayout,
     initial_state_transform_bind_group_layout: wgpu::BindGroupLayout,
     final_state_transform_bind_group_layout:   wgpu::BindGroupLayout,
     clear_stability_bind_group_layout:         wgpu::BindGroupLayout,
@@ -40,6 +41,7 @@ struct StafraBindings
 
     render_state_bind_group:      wgpu::BindGroup,
     clear_default_bind_group:     wgpu::BindGroup,
+    bake_click_rule_bind_group:   wgpu::BindGroup,
     initial_transform_bind_group: wgpu::BindGroup,
     next_step_bind_group_a:       wgpu::BindGroup,
     next_step_bind_group_b:       wgpu::BindGroup,
@@ -50,17 +52,21 @@ struct StafraBindings
     generate_mip_bind_groups:     Vec<wgpu::BindGroup>,
 
     #[allow(dead_code)]
-    initial_state:     wgpu::Texture,
+    click_rule_texture: wgpu::Texture,
     #[allow(dead_code)]
-    current_board:     wgpu::Texture,
+    initial_state:      wgpu::Texture,
     #[allow(dead_code)]
-    next_board:        wgpu::Texture,
+    current_board:      wgpu::Texture,
     #[allow(dead_code)]
-    current_stability: wgpu::Texture,
+    next_board:         wgpu::Texture,
     #[allow(dead_code)]
-    next_stability:    wgpu::Texture,
+    current_stability:  wgpu::Texture,
     #[allow(dead_code)]
-    final_state:       wgpu::Texture,
+    next_stability:     wgpu::Texture,
+    #[allow(dead_code)]
+    final_state:        wgpu::Texture,
+    #[allow(dead_code)]
+    click_rule_buffer:  wgpu::Buffer,
 }
 
 #[derive(Copy, Clone, PartialEq)]
@@ -91,6 +97,7 @@ pub struct StafraState
     clear_4_corners_pipeline:         wgpu::ComputePipeline,
     clear_4_sides_pipeline:           wgpu::ComputePipeline,
     clear_center_pipeline:            wgpu::ComputePipeline,
+    bake_click_rule_pipeline:         wgpu::ComputePipeline,
     initial_state_transform_pipeline: wgpu::ComputePipeline,
     final_state_transform_pipeline:   wgpu::ComputePipeline,
     clear_stability_pipeline:         wgpu::ComputePipeline,
@@ -236,6 +243,47 @@ impl StafraBindingLayouts
             }
         }
 
+        macro_rules! click_rule_uniform_binding
+        {
+            ($bd:literal) =>
+            {
+                wgpu::BindGroupLayoutEntry
+                {
+                    binding:    $bd,
+                    visibility: wgpu::ShaderStages::COMPUTE,
+                    ty:         wgpu::BindingType::Buffer
+                    {
+                        ty:                 wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size:   NonZeroU64::new(4 * std::mem::size_of::<i32>() as u64 + 32 * 32 * 2 * std::mem::size_of::<i32>() as u64)
+                    },
+                    count: None
+                }
+            }
+        }
+
+        macro_rules! click_rule_storage_binding
+        {
+            ($bd:literal) =>
+            {
+                wgpu::BindGroupLayoutEntry
+                {
+                    binding:    $bd,
+                    visibility: wgpu::ShaderStages::COMPUTE,
+                    ty:         wgpu::BindingType::Buffer
+                    {
+                        ty: wgpu::BufferBindingType::Storage
+                        {
+                            read_only: false
+                        },
+                        has_dynamic_offset: false,
+                        min_binding_size:   NonZeroU64::new(4 * std::mem::size_of::<i32>() as u64 + 32 * 32 * 2 * std::mem::size_of::<i32>() as u64)
+                    },
+                    count: None
+                }
+            }
+        }
+
         let render_state_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor
         {
             label: None,
@@ -252,6 +300,16 @@ impl StafraBindingLayouts
             entries:
             &[
                 board_image_binding!(0)
+            ]
+        });
+
+        let bake_click_rule_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor
+        {
+            label: None,
+            entries:
+            &[
+                board_texture_binding!(0),
+                click_rule_storage_binding!(1)
             ]
         });
 
@@ -294,6 +352,8 @@ impl StafraBindingLayouts
 
                 board_image_binding!(2),
                 board_image_binding!(3),
+
+                click_rule_uniform_binding!(4)
             ]
         });
 
@@ -327,6 +387,7 @@ impl StafraBindingLayouts
         {
             render_state_bind_group_layout,
             clear_default_bind_group_layout,
+            bake_click_rule_bind_group_layout,
             initial_state_transform_bind_group_layout,
             final_state_transform_bind_group_layout,
             clear_stability_bind_group_layout,
@@ -346,6 +407,22 @@ impl StafraBindings
         assert!((height + 1).is_power_of_two());
 
         let board_size = BoardDimensions {width, height};
+
+        let click_rule_texture_descriptor = wgpu::TextureDescriptor
+        {
+            label: None,
+            size:  wgpu::Extent3d
+            {
+                width:                 32,
+                height:                32,
+                depth_or_array_layers: 1
+            },
+            mip_level_count: 1,
+            sample_count:    1,
+            dimension:       wgpu::TextureDimension::D2,
+            format:          wgpu::TextureFormat::R32Uint,
+            usage:           wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::STORAGE_BINDING
+        };
 
         let initial_state_texture_descriptor = wgpu::TextureDescriptor
         {
@@ -396,12 +473,35 @@ impl StafraBindings
             usage:           wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::STORAGE_BINDING | wgpu::TextureUsages::COPY_SRC
         };
 
-        let initial_state     = device.create_texture(&initial_state_texture_descriptor);
-        let current_board     = device.create_texture(&board_texture_descriptor);
-        let next_board        = device.create_texture(&board_texture_descriptor);
-        let current_stability = device.create_texture(&board_texture_descriptor);
-        let next_stability    = device.create_texture(&board_texture_descriptor);
-        let final_state       = device.create_texture(&final_state_texture_descriptor);
+        let click_rule_buffer_descriptor = wgpu::BufferDescriptor
+        {
+            label:              None,
+            size:               4 * std::mem::size_of::<i32>() as u64 + 32 * 32 * 2 * std::mem::size_of::<i32>() as u64,
+            usage:              wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::STORAGE,
+            mapped_at_creation: false
+        };
+
+        let click_rule_texture = device.create_texture(&click_rule_texture_descriptor);
+        let initial_state      = device.create_texture(&initial_state_texture_descriptor);
+        let current_board      = device.create_texture(&board_texture_descriptor);
+        let next_board         = device.create_texture(&board_texture_descriptor);
+        let current_stability  = device.create_texture(&board_texture_descriptor);
+        let next_stability     = device.create_texture(&board_texture_descriptor);
+        let final_state        = device.create_texture(&final_state_texture_descriptor);
+
+        let click_rule_buffer = device.create_buffer(&click_rule_buffer_descriptor);
+
+        let click_rule_texture_view_descriptor = wgpu::TextureViewDescriptor
+        {
+            label:             None,
+            format:            Some(wgpu::TextureFormat::R32Uint),
+            dimension:         Some(wgpu::TextureViewDimension::D2),
+            aspect:            wgpu::TextureAspect::All,
+            base_mip_level:    0,
+            mip_level_count:   None,
+            base_array_layer:  0,
+            array_layer_count: None
+        };
 
         let initial_state_view_descriptor = wgpu::TextureViewDescriptor
         {
@@ -439,12 +539,13 @@ impl StafraBindings
             array_layer_count: None
         };
 
-        let initial_state_view     = initial_state.create_view(&initial_state_view_descriptor);
-        let current_board_view     = current_board.create_view(&board_view_descriptor);
-        let next_board_view        = next_board.create_view(&board_view_descriptor);
-        let current_stability_view = current_stability.create_view(&board_view_descriptor);
-        let next_stability_view    = next_stability.create_view(&board_view_descriptor);
-        let final_state_view       = final_state.create_view(&final_state_view_descriptor);
+        let click_rule_texture_view = click_rule_texture.create_view(&click_rule_texture_view_descriptor);
+        let initial_state_view      = initial_state.create_view(&initial_state_view_descriptor);
+        let current_board_view      = current_board.create_view(&board_view_descriptor);
+        let next_board_view         = next_board.create_view(&board_view_descriptor);
+        let current_stability_view  = current_stability.create_view(&board_view_descriptor);
+        let next_stability_view     = next_stability.create_view(&board_view_descriptor);
+        let final_state_view        = final_state.create_view(&final_state_view_descriptor);
 
         let mut final_state_mip_views = Vec::with_capacity(final_state_mips as usize);
         for i in 0..final_state_mips
@@ -493,6 +594,26 @@ impl StafraBindings
                     binding: 0,
                     resource: wgpu::BindingResource::TextureView(&current_board_view),
                 },
+            ]
+        });
+
+        let bake_click_rule_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor
+        {
+            label: None,
+            layout: &binding_layouts.bake_click_rule_bind_group_layout,
+            entries:
+            &[
+                wgpu::BindGroupEntry
+                {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&click_rule_texture_view),
+                },
+
+                wgpu::BindGroupEntry
+                {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Buffer(click_rule_buffer.as_entire_buffer_binding())
+                }
             ]
         });
 
@@ -545,6 +666,12 @@ impl StafraBindings
                     binding: 3,
                     resource: wgpu::BindingResource::TextureView(&next_stability_view),
                 },
+
+                wgpu::BindGroupEntry
+                {
+                    binding: 4,
+                    resource: wgpu::BindingResource::Buffer(click_rule_buffer.as_entire_buffer_binding())
+                }
             ]
         });
 
@@ -577,6 +704,12 @@ impl StafraBindings
                     binding: 3,
                     resource: wgpu::BindingResource::TextureView(&current_stability_view),
                 },
+
+                wgpu::BindGroupEntry
+                {
+                    binding: 4,
+                    resource: wgpu::BindingResource::Buffer(click_rule_buffer.as_entire_buffer_binding())
+                }
             ]
         });
 
@@ -678,6 +811,7 @@ impl StafraBindings
 
             render_state_bind_group,
             clear_default_bind_group,
+            bake_click_rule_bind_group,
             initial_transform_bind_group,
             next_step_bind_group_a,
             next_step_bind_group_b,
@@ -687,12 +821,14 @@ impl StafraBindings
             clear_stability_bind_group_b,
             generate_mip_bind_groups,
 
+            click_rule_texture,
             initial_state,
             current_board,
             next_board,
             current_stability,
             next_stability,
-            final_state
+            final_state,
+            click_rule_buffer
         }
     }
 }
@@ -748,6 +884,8 @@ impl StafraState
         let final_state_transform_module   = device.create_shader_module(&wgpu::include_spirv!("../target/shaders/final_state_transform.spv"));
         let clear_stability_module         = device.create_shader_module(&wgpu::include_spirv!("../target/shaders/clear_stability.spv"));
 
+        let bake_click_rule_module = device.create_shader_module(&wgpu::include_spirv!("../target/shaders/bake_click_rule.spv"));
+
         let next_step_module = device.create_shader_module(&wgpu::include_spirv!("../target/shaders/next_step.spv"));
 
         let generate_mip_module = device.create_shader_module(&wgpu::include_spirv!("../target/shaders/final_state_generate_next_mip.spv"));
@@ -769,18 +907,25 @@ impl StafraState
             push_constant_ranges: &[]
         });
 
+        let bake_click_rule_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor
+        {
+            label: None,
+            bind_group_layouts: &[&binding_layouts.bake_click_rule_bind_group_layout],
+            push_constant_ranges: &[]
+        });
+
         let initial_state_transform_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor
         {
             label: None,
             bind_group_layouts: &[&binding_layouts.initial_state_transform_bind_group_layout],
-            push_constant_ranges: &[],
+            push_constant_ranges: &[]
         });
 
         let final_state_transform_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor
         {
             label: None,
             bind_group_layouts: &[&binding_layouts.final_state_transform_bind_group_layout],
-            push_constant_ranges: &[],
+            push_constant_ranges: &[]
         });
 
         let clear_stability_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor
@@ -872,6 +1017,14 @@ impl StafraState
             entry_point: "main"
         });
 
+        let bake_click_rule_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor
+        {
+            label:       None,
+            layout:      Some(&bake_click_rule_pipeline_layout),
+            module:      &bake_click_rule_module,
+            entry_point: "main"
+        });
+
         let initial_state_transform_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor
         {
             label:       None,
@@ -925,6 +1078,7 @@ impl StafraState
             clear_4_corners_pipeline,
             clear_4_sides_pipeline,
             clear_center_pipeline,
+            bake_click_rule_pipeline,
             initial_state_transform_pipeline,
             final_state_transform_pipeline,
             next_step_pipeline,

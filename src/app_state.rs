@@ -89,7 +89,7 @@ impl AppState
 
         let window   = web_sys::window().unwrap();
         let document = window.document().unwrap();
-        let canvas   = document.get_element_by_id("STAFRA_canvas").unwrap().dyn_into::<web_sys::HtmlCanvasElement>().ok();
+        let canvas   = document.get_element_by_id("stafra_canvas").unwrap().dyn_into::<web_sys::HtmlCanvasElement>().ok();
 
         let canvas_window = WindowBuilder::new().with_canvas(canvas).build(&event_loop).unwrap();
 

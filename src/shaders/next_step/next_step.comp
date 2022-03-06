@@ -2,7 +2,36 @@
 
 #extension GL_EXT_samplerless_texture_functions: require
 
-layout(local_size_x = 16, local_size_y = 16) in;
+//For each enabled cell with coordinates (x, y) on prevBoard we change the state of the neighbor cells on nextBoard.
+//First, init nextBoard[x, y] = 0.
+//If prevBoard[x, y] == 1, then for each (xi, yj) in EnabledPositions we calculate nextBoard[x + xi, y + yi] = (nextBoard[x + xi, y + yi] + 1) mod 2
+//If prevBoard[x, y] == 0, then for each (xi, yj) in EnabledPositions we calculate nextBoard[x + xi, y + yi] = nextBoard[x + xi, y + yi]
+//In other words, for each (xi, yj) in EnabledPositions we calculate nextBoard[x + xi, y + yi] = (nextBoard[x + xi, y + yi] + prevBoard[x, y]) mod 2
+//Flipping this, we can calculate nextBoard[x, y] = SUM(prevBoard[x - xi, y - yi]) mod 2 for all (xi, ui)
+//After that, we calculate nextStability[x, y] as prevStability[x, y] & (prevBoard[x, y] == nextBoard[x, y])
+
+//We store both boards and both stabilities as 2x2 quads. Each quad is packed into a single 32-bit value. The values prevBoard[x, y] and nextBoard[x, y] refer to entire 2x2 quads.
+//Each 2x2 quad is encoded as
+// (Bits 0-7)   (Bits 8-15)
+// (Bits 16-23) (Bits 24-31)
+//Each workgroup has 8x8 threads, and each thread processes a single quad. The workgroup processes a 16x16 block of values.
+//The largest click rule radius is 16, which means each workgroup might access eight more 16x16 blocks of values, surrounding the original one.
+//These blocks are packed into quads too, so we need to store up to 24x24 quads.
+
+//The original formula for nextBoard[x, y] can be extended to quads. Instead of using prevBoard[x - xi, y - yi], we calculate the quad to add from the elements of prevBoard.
+//The formula to calculate this quad depends on the values of xi and yi:
+//- If both xi and yi are divisible by 2, we add the quad at prevBoard[xi / 2, yi / 2] to the quad at nextBoard[xi / 2, yi / 2].
+//- If only yi is divisible by 2, we construct a new quad from the right half of prevBoard[(xi - 1) / 2, yi / 2] and left half of prevBoard[(xi + 1) / 2, yi / 2], and add it to nextBoard.
+//- If only xi is divisible by 2, we construct a new quad from the top half of prevBoard[xi / 2, (yi - 1) / 2] and bottom half of prevBoard[xi / 2, (yi + 1) / 2], and add it to nextBoard.
+//- If both xi and yi are indivisible by 2, we construct a new quad from the opposite values of four surrounding quads.
+
+#define CLICK_RULE_WIDTH  32
+#define CLICK_RULE_HEIGHT 32
+
+#define CLICK_RULE_DATA_WIDTH  (CLICK_RULE_WIDTH  / 2)
+#define CLICK_RULE_DATA_HEIGHT (CLICK_RULE_HEIGHT / 2)
+
+layout(local_size_x = 8, local_size_y = 8) in;
 
 layout(set = 0, binding = 0) uniform utexture2D prevBoard;
 layout(set = 0, binding = 1) uniform utexture2D prevStability;
@@ -10,75 +39,188 @@ layout(set = 0, binding = 1) uniform utexture2D prevStability;
 layout(set = 0, binding = 2, r32ui) uniform writeonly uimage2D nextBoard;
 layout(set = 0, binding = 3, r32ui) uniform writeonly uimage2D nextStability;
 
-shared uint quadStates[(gl_WorkGroupSize.x + 2) * (gl_WorkGroupSize.y + 2)];
+layout(set = 0, binding = 4) uniform ClickRuleData
+{
+    uvec4 HeaderPacked;
+    ivec4 EnabledPositionsPacked[CLICK_RULE_WIDTH * CLICK_RULE_HEIGHT / 2];
+} clickRuleData;
+
+shared uint sharedQuadStates[(gl_WorkGroupSize.x + CLICK_RULE_DATA_WIDTH) * (gl_WorkGroupSize.y + CLICK_RULE_DATA_HEIGHT)];
+
+uint calcQuadIndex(ivec2 quadOffset, const uint extraRadiusQuads)
+{
+    const uint quadSharedStateWidth  = gl_WorkGroupSize.x + extraRadiusQuads * 2;
+    const uint quadSharedStateHeight = gl_WorkGroupSize.y + extraRadiusQuads * 2;
+
+    return (gl_LocalInvocationID.y + quadOffset.y + extraRadiusQuads) * quadSharedStateWidth + (gl_LocalInvocationID.x + quadOffset.x + extraRadiusQuads);
+}
+
+uint calcQuad(ivec2 clickRuleOffset, const uint extraRadiusQuads)
+{
+    bool xEven = clickRuleOffset.x % 2 == 0;
+    bool yEven = clickRuleOffset.y % 2 == 0;
+
+    if(xEven && yEven)
+    {
+        ivec2 quadOffset = clickRuleOffset / 2;
+        uint sharedQuadIndex = calcQuadIndex(quadOffset, extraRadiusQuads);
+
+        return sharedQuadStates[sharedQuadIndex];
+    }
+    else if(yEven)
+    {
+        const uint leftQuadMask  = 0x00ff00ff;
+        const uint rightQuadMask = 0xff00ff00;
+
+        ivec2 leftQuadOffset  = ivec2(clickRuleOffset.x - 1, clickRuleOffset.y) / 2;
+        ivec2 rightQuadOffset = ivec2(clickRuleOffset.x + 1, clickRuleOffset.y) / 2;
+
+        uint leftSharedQuadIndex  = calcQuadIndex(leftQuadOffset,  extraRadiusQuads);
+        uint rightSharedQuadIndex = calcQuadIndex(rightQuadOffset, extraRadiusQuads);
+
+        uint rightHalfLeftQuad = (sharedQuadStates[leftSharedQuadIndex] & rightQuadMask);
+        uint leftHalfRightQuad = (sharedQuadStates[rightSharedQuadIndex] & leftQuadMask);
+
+        return (rightHalfLeftQuad >> 8) | (leftHalfRightQuad << 8);
+    }
+    else if(xEven)
+    {
+        const uint topQuadMask    = 0x0000ffff;
+        const uint bottomQuadMask = 0xffff0000;
+
+        ivec2 topQuadOffset    = ivec2(clickRuleOffset.x, clickRuleOffset.y - 1) / 2;
+        ivec2 bottomQuadOffset = ivec2(clickRuleOffset.x, clickRuleOffset.y + 1) / 2;
+
+        uint topSharedQuadIndex    = calcQuadIndex(topQuadOffset,    extraRadiusQuads);
+        uint bottomSharedQuadIndex = calcQuadIndex(bottomQuadOffset, extraRadiusQuads);
+
+        uint bottomHalfTopQuad = (sharedQuadStates[topSharedQuadIndex] & bottomQuadMask);
+        uint topHalfBottomQuad = (sharedQuadStates[bottomSharedQuadIndex] & topQuadMask);
+
+        return (bottomHalfTopQuad >> 16) | (topHalfBottomQuad << 16);
+    }
+    else
+    {
+        const uint topLeftQuadMask     = 0x000000ff;
+        const uint topRightQuadMask    = 0x0000ff00;
+        const uint bottomLeftQuadMask  = 0x00ff0000;
+        const uint bottomRightQuadMask = 0xff000000;
+
+        ivec2 topLeftQuadOffset     = ivec2(clickRuleOffset.x - 1, clickRuleOffset.y - 1) / 2;
+        ivec2 topRightQuadOffset    = ivec2(clickRuleOffset.x + 1, clickRuleOffset.y - 1) / 2;
+        ivec2 bottomLeftQuadOffset  = ivec2(clickRuleOffset.x - 1, clickRuleOffset.y + 1) / 2;
+        ivec2 bottomRightQuadOffset = ivec2(clickRuleOffset.x + 1, clickRuleOffset.y + 1) / 2;
+
+        uint topLeftSharedQuadIndex     = calcQuadIndex(topLeftQuadOffset,     extraRadiusQuads);
+        uint topRightSharedQuadIndex    = calcQuadIndex(topRightQuadOffset,    extraRadiusQuads);
+        uint bottomLeftSharedQuadIndex  = calcQuadIndex(bottomLeftQuadOffset,  extraRadiusQuads);
+        uint bottomRightSharedQuadIndex = calcQuadIndex(bottomRightQuadOffset, extraRadiusQuads);
+
+        uint bottomRightOfTopLeft = (sharedQuadStates[topLeftSharedQuadIndex] & bottomRightQuadMask);
+        uint bottomLeftOfTopRight = (sharedQuadStates[topRightSharedQuadIndex] & bottomLeftQuadMask);
+        uint topRightOfBottomLeft = (sharedQuadStates[bottomLeftSharedQuadIndex] & topRightQuadMask);
+        uint topLeftOfBottomRight = (sharedQuadStates[bottomRightSharedQuadIndex] & topLeftQuadMask);
+
+        return (bottomRightOfTopLeft >> 24) | (bottomLeftOfTopRight >> 8) | (topRightOfBottomLeft << 8) | (topLeftOfBottomRight << 24);
+    }
+}
 
 void main()
 {
-    uint sharedQuadStateIndex       = (gl_LocalInvocationID.y + 1) * (gl_WorkGroupSize.x + 2) + (gl_LocalInvocationID.x + 1);
-    uint sharedLeftQuadStateIndex   = (gl_LocalInvocationID.y + 1) * (gl_WorkGroupSize.x + 2) +  gl_LocalInvocationID.x;
-    uint sharedRightQuadStateIndex  = (gl_LocalInvocationID.y + 1) * (gl_WorkGroupSize.x + 2) + (gl_LocalInvocationID.x + 2);
-    uint sharedTopQuadStateIndex    =  gl_LocalInvocationID.y      * (gl_WorkGroupSize.x + 2) + (gl_LocalInvocationID.x + 1);
-    uint sharedBottomQuadStateIndex = (gl_LocalInvocationID.y + 2) * (gl_WorkGroupSize.x + 2) + (gl_LocalInvocationID.x + 1);
+    const uint elementCount = clickRuleData.HeaderPacked.x;
+    const uint radius       = clickRuleData.HeaderPacked.y;
 
-    uint thisQuadState = texelFetch(prevBoard, ivec2(gl_GlobalInvocationID.xy), 0).x;
-    quadStates[sharedQuadStateIndex] = thisQuadState;
-
-    if(gl_LocalInvocationID.x == 0)
+    if(radius == 0)
     {
-        uint leftQuadState = texelFetch(prevBoard, ivec2(gl_GlobalInvocationID.xy) + ivec2(-1, 0), 0).x;
-        quadStates[sharedLeftQuadStateIndex] = leftQuadState;
+        return;
     }
 
-    if(gl_LocalInvocationID.x == gl_WorkGroupSize.x - 1)
-    {
-        uint rightQuadState = texelFetch(prevBoard, ivec2(gl_GlobalInvocationID.xy) + ivec2(1, 0), 0).x;
-        quadStates[sharedRightQuadStateIndex] = rightQuadState;
-    }
+    uint extraRadius      = radius - 1;
+    uint extraRadiusQuads = (extraRadius + 1) / 2;
 
-    if(gl_LocalInvocationID.y == 0)
-    {
-        uint topQuadState = texelFetch(prevBoard, ivec2(gl_GlobalInvocationID.xy) + ivec2(0, -1), 0).x;
-        quadStates[sharedTopQuadStateIndex] = topQuadState;
-    }
+    uint quadStateIndex = calcQuadIndex(ivec2(0, 0), extraRadiusQuads);
+    uint prevBoardQuad = texelFetch(prevBoard, ivec2(gl_GlobalInvocationID.xy), 0).x;
+    sharedQuadStates[quadStateIndex] = prevBoardQuad;
 
-    if(gl_LocalInvocationID.y == gl_WorkGroupSize.y - 1)
+    if(extraRadiusQuads > 0)
     {
-        uint bottomQuadState = texelFetch(prevBoard, ivec2(gl_GlobalInvocationID.xy) + ivec2(0, 1), 0).x;
-        quadStates[sharedBottomQuadStateIndex] = bottomQuadState;
+        //Save eight extra 8x8 blocks into cache:
+        //X X X
+        //X o X
+        //X X X
+        //The threads saving the data for the block are the ones that, having the original block shifted to the one being saved,
+        //have gl_LocalInvocationID.xy still in bounds of extraRadiusQuads
+        bool inBlocks[8] =
+        {
+            (gl_LocalInvocationID.x > gl_WorkGroupSize.x - extraRadiusQuads) && (gl_LocalInvocationID.y > gl_WorkGroupSize.y - extraRadiusQuads),
+                                                                                (gl_LocalInvocationID.y > gl_WorkGroupSize.y - extraRadiusQuads),
+            (gl_LocalInvocationID.x < extraRadiusQuads)                      && (gl_LocalInvocationID.y > gl_WorkGroupSize.y - extraRadiusQuads),
+            (gl_LocalInvocationID.x > gl_WorkGroupSize.x - extraRadiusQuads),
+            (gl_LocalInvocationID.x < extraRadiusQuads),
+            (gl_LocalInvocationID.x > gl_WorkGroupSize.x - extraRadiusQuads) && (gl_LocalInvocationID.y < extraRadiusQuads),
+                                                                                (gl_LocalInvocationID.y < extraRadiusQuads),
+            (gl_LocalInvocationID.x < extraRadiusQuads)                      && (gl_LocalInvocationID.y < extraRadiusQuads)
+        };
+
+        ivec2 blockOffsets[8] =
+        {
+            ivec2(-gl_WorkGroupSize.x, -gl_WorkGroupSize.y),
+            ivec2( 0,                  -gl_WorkGroupSize.y),
+            ivec2( gl_WorkGroupSize.x, -gl_WorkGroupSize.y),
+            ivec2(-gl_WorkGroupSize.x,  0),
+            ivec2( gl_WorkGroupSize.x,  0),
+            ivec2(-gl_WorkGroupSize.x,  gl_WorkGroupSize.y),
+            ivec2( 0,                   gl_WorkGroupSize.y),
+            ivec2( gl_WorkGroupSize.x,  gl_WorkGroupSize.y)
+        };
+
+        for(int i = 0; i < 8; i++)
+        {
+            if(inBlocks[i])
+            {
+                uint extraQuadStateIndex = calcQuadIndex(blockOffsets[i], extraRadiusQuads);
+                sharedQuadStates[extraQuadStateIndex] = texelFetch(prevBoard, ivec2(gl_GlobalInvocationID.xy) + blockOffsets[i], 0).x;
+            }
+        }
     }
 
     barrier();
 
-    //Masks for halves of 2x2 quad, encoded as
-    // (Bits 0-7)   (Bits 8-15)
-    // (Bits 16-23) (Bits 24-31)
-    const uint leftQuadMask   = 0x00ff00ff;
+    //Board size is always 2^n - 1. Mask out the bottom and the right edge
     const uint rightQuadMask  = 0xff00ff00;
-    const uint topQuadMask    = 0x0000ffff;
     const uint bottomQuadMask = 0xffff0000;
 
-    uint thisQuad   = quadStates[sharedQuadStateIndex];
-    uint leftQuad   = quadStates[sharedLeftQuadStateIndex];
-    uint rightQuad  = quadStates[sharedRightQuadStateIndex];
-    uint topQuad    = quadStates[sharedTopQuadStateIndex];
-    uint bottomQuad = quadStates[sharedBottomQuadStateIndex];
-
-    uint quadThisState   = thisQuad;
-    uint quadLeftState   = ((leftQuad   & rightQuadMask)  >>  8) | ((thisQuad & leftQuadMask)   <<  8);
-    uint quadRightState  = ((rightQuad  & leftQuadMask)   <<  8) | ((thisQuad & rightQuadMask)  >>  8);
-    uint quadTopState    = ((topQuad    & bottomQuadMask) >> 16) | ((thisQuad & topQuadMask)    << 16);
-    uint quadBottomState = ((bottomQuad & topQuadMask)    << 16) | ((thisQuad & bottomQuadMask) >> 16);
-
-    uvec2 rightBottomCoord = imageSize(nextBoard) + ivec2(-1, -1); //Board size is always 2^n - 1. Need to mask out the bottom and right edge
+    uvec2 rightBottomCoord = imageSize(nextBoard) + ivec2(-1, -1);
     bvec2 onRightBottom    = equal(gl_GlobalInvocationID.xy, rightBottomCoord);
     uvec2 rightBottomMask  = uvec2(rightQuadMask, bottomQuadMask) * uvec2(onRightBottom);
 
-    uint modulo2Mask   = 0x01010101u & ~(rightBottomMask.x | rightBottomMask.y);
-    uint quadNextState = (thisQuad + quadLeftState + quadRightState + quadTopState + quadBottomState) & modulo2Mask;
+    uint modulo2Mask = 0x01010101u & ~(rightBottomMask.x | rightBottomMask.y);
 
-    uint prevStabilityState = texelFetch(prevStability, ivec2(gl_GlobalInvocationID.xy), 0).x;
-    uint nextStabilityState = (prevStabilityState & ~(quadNextState ^ quadThisState));
+    uint packedElementCount = elementCount / 2;
+    uint nextBoardQuad      = 0x00000000;
+    for(int i = 0; i < packedElementCount; i++)
+    {
+        ivec4 offsetsPacked = clickRuleData.EnabledPositionsPacked[i];
 
-    imageStore(nextBoard,     ivec2(gl_GlobalInvocationID.xy), uvec4(quadNextState));
-    imageStore(nextStability, ivec2(gl_GlobalInvocationID.xy), uvec4(nextStabilityState));
+        ivec2 offset1 = offsetsPacked.xy;
+        ivec2 offset2 = offsetsPacked.zw;
+
+        uint prevBoardQuad1 = calcQuad(offset1, extraRadiusQuads);
+        uint prevBoardQuad2 = calcQuad(offset2, extraRadiusQuads);
+
+        nextBoardQuad = (nextBoardQuad + prevBoardQuad1 + prevBoardQuad2) & modulo2Mask;
+    }
+
+    if(elementCount % 2 != 0)
+    {
+        ivec2 lastOffset = clickRuleData.EnabledPositionsPacked[packedElementCount].xy;
+        uint prevBoardQuad = calcQuad(lastOffset, extraRadiusQuads);
+        nextBoardQuad = (nextBoardQuad + prevBoardQuad) & modulo2Mask;
+    }
+
+    uint prevStabilityQuad = texelFetch(prevStability, ivec2(gl_GlobalInvocationID.xy), 0).x;
+    uint nextStabilityQuad = (prevStabilityQuad & ~(prevBoardQuad ^ nextBoardQuad));
+
+    imageStore(nextBoard,     ivec2(gl_GlobalInvocationID.xy), uvec4(nextBoardQuad));
+    imageStore(nextStability, ivec2(gl_GlobalInvocationID.xy), uvec4(nextStabilityQuad));
 }

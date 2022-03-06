@@ -18,6 +18,8 @@ set RUSTFLAGS=--cfg=web_sys_unstable_apis
 
 %VULKAN_SDK%/Bin/glslangValidator -V --target-env spirv1.3 -g -o ../target/shaders/next_step.spv ../src/shaders/next_step/next_step.comp
 
+%VULKAN_SDK%/Bin/glslangValidator -V --target-env spirv1.3 -g -o ../target/shaders/bake_click_rule.spv ../src/shaders/click_rule/bake_click_rule.comp
+
 %VULKAN_SDK%/Bin/glslangValidator -V --target-env spirv1.3 -g -o ../target/shaders/initial_state_transform.spv ../src/shaders/state_transform/initial_state_transform.comp
 %VULKAN_SDK%/Bin/glslangValidator -V --target-env spirv1.3 -g -o ../target/shaders/final_state_transform.spv   ../src/shaders/state_transform/final_state_transform.comp
 %VULKAN_SDK%/Bin/glslangValidator -V --target-env spirv1.3 -g -o ../target/shaders/clear_stability.spv         ../src/shaders/state_transform/clear_stability.comp
