@@ -421,7 +421,7 @@ impl StafraBindings
             sample_count:    1,
             dimension:       wgpu::TextureDimension::D2,
             format:          wgpu::TextureFormat::R32Uint,
-            usage:           wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::STORAGE_BINDING
+            usage:           wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::STORAGE_BINDING | wgpu::TextureUsages::COPY_DST
         };
 
         let initial_state_texture_descriptor = wgpu::TextureDescriptor
@@ -1301,6 +1301,55 @@ impl StafraState
         self.last_reset_type = ResetBoardType::Custom;
     }
 
+    pub fn reset_click_rule(&mut self)
+    {
+        let click_rule_size = 32;
+        let mut click_rule_byte_data = vec![0u8; click_rule_size * click_rule_size * 4];
+
+        let center_cell_xy = (click_rule_size - 1) / 2;
+        let left_cell_x    = center_cell_xy - 1;
+        let right_cell_x   = center_cell_xy + 1;
+        let top_cell_y     = center_cell_xy - 1;
+        let bottom_cell_y  = center_cell_xy + 1;
+
+        let center_cell_byte_start_index = (center_cell_xy * click_rule_size + center_cell_xy) * 4;
+        let left_cell_byte_start_index   = (center_cell_xy * click_rule_size + left_cell_x)    * 4;
+        let right_cell_byte_start_index  = (center_cell_xy * click_rule_size + right_cell_x)   * 4;
+        let top_cell_byte_start_index    = (top_cell_y     * click_rule_size + center_cell_xy) * 4;
+        let bottom_cell_byte_start_index = (bottom_cell_y  * click_rule_size + center_cell_xy) * 4;
+
+        //Set the LSB of the each u32 to 1
+        click_rule_byte_data[center_cell_byte_start_index] = 1;
+        click_rule_byte_data[left_cell_byte_start_index]   = 1;
+        click_rule_byte_data[right_cell_byte_start_index]  = 1;
+        click_rule_byte_data[top_cell_byte_start_index]    = 1;
+        click_rule_byte_data[bottom_cell_byte_start_index] = 1;
+
+        self.queue.write_texture(wgpu::ImageCopyTexture
+        {
+            texture:   &self.bindings.click_rule_texture,
+            mip_level: 0,
+            origin:    wgpu::Origin3d::ZERO,
+            aspect:    wgpu::TextureAspect::All
+        },
+        click_rule_byte_data.as_slice(),
+        wgpu::ImageDataLayout
+        {
+            offset:         0,
+            bytes_per_row:  NonZeroU32::new(click_rule_size as u32 * std::mem::size_of::<u32>() as u32),
+            rows_per_image: NonZeroU32::new(click_rule_size as u32)
+        },
+        wgpu::Extent3d
+        {
+            width:                 click_rule_size as u32,
+            height:                click_rule_size as u32,
+            depth_or_array_layers: 1
+        });
+
+        let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor{label: None});
+        self.bake_click_rule(&mut encoder);
+    }
+
     pub fn update(&mut self)
     {
         let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor{label: None});
@@ -1494,6 +1543,22 @@ impl StafraState
             clear_stability_pass_b.set_pipeline(&self.clear_stability_pipeline);
             clear_stability_pass_b.set_bind_group(0, &self.bindings.clear_stability_bind_group_b, &[]);
             clear_stability_pass_b.dispatch(thread_groups_x, thread_groups_y, 1);
+        }
+    }
+
+    fn bake_click_rule(&self, encoder: &mut wgpu::CommandEncoder)
+    {
+        let click_rule_texture_size = 32;
+        let workgroup_size          = 8;
+
+        let thread_group_size = click_rule_texture_size / workgroup_size;
+
+        {
+            let mut bake_click_rule_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {label: None});
+
+            bake_click_rule_pass.set_pipeline(&self.bake_click_rule_pipeline);
+            bake_click_rule_pass.set_bind_group(0, &self.bindings.bake_click_rule_bind_group, &[]);
+            bake_click_rule_pass.dispatch(thread_group_size, thread_group_size, 1);
         }
     }
 }

@@ -125,8 +125,6 @@ fn calculate_quad(local_thread_id: vec2<u32>, click_rule_offset: vec2<i32>, extr
 
         return (bottom_right_of_top_left >> 24u) | (bottom_left_of_top_right >> 8u) | (top_right_of_bottom_left << 8u) | (top_left_of_bottom_right << 24u);
     }
-
-    return 0u;
 }
 
 @stage(compute) @workgroup_size(8, 8)

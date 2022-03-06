@@ -35,11 +35,12 @@ enum ResetOption
 
 pub struct AppState
 {
-    event_loop:       EventLoop<AppEvent>,
-    event_loop_proxy: Rc<EventLoopProxy<AppEvent>>,
-    canvas_window:    Window,
-    window_size:      winit::dpi::PhysicalSize<u32>,
-    run_state:        RunState,
+    event_loop:        EventLoop<AppEvent>,
+    event_loop_proxy:  Rc<EventLoopProxy<AppEvent>>,
+    main_window:       Window,
+    click_rule_window: Window,
+    window_size:       winit::dpi::PhysicalSize<u32>,
+    run_state:         RunState,
 
     #[cfg(target_arch = "wasm32")]
     document: web_sys::Document,
@@ -87,12 +88,13 @@ impl AppState
         let event_loop: EventLoop<AppEvent> = EventLoop::with_user_event();
         let event_loop_proxy                = Rc::new(event_loop.create_proxy());
 
-        let window   = web_sys::window().unwrap();
-        let document = window.document().unwrap();
-        let canvas   = document.get_element_by_id("stafra_canvas").unwrap().dyn_into::<web_sys::HtmlCanvasElement>().ok();
+        let window            = web_sys::window().unwrap();
+        let document          = window.document().unwrap();
+        let main_canvas       = document.get_element_by_id("stafra_canvas").unwrap().dyn_into::<web_sys::HtmlCanvasElement>().ok();
+        let click_rule_canvas = document.get_element_by_id("click_rule_canvas").unwrap().dyn_into::<web_sys::HtmlCanvasElement>().ok();
 
-        let canvas_window = WindowBuilder::new().with_canvas(canvas).build(&event_loop).unwrap();
-
+        let main_window       = WindowBuilder::new().with_canvas(main_canvas).build(&event_loop).unwrap();
+        let click_rule_window = WindowBuilder::new().with_canvas(click_rule_canvas).build(&event_loop).unwrap();
 
         let event_loop_proxy_save_png = event_loop_proxy.clone();
         let save_png_function = Closure::wrap(Box::new(move ||
@@ -215,14 +217,15 @@ impl AppState
         let initial_state_select = document.get_element_by_id("initial_states").unwrap().dyn_into::<web_sys::HtmlSelectElement>().unwrap();
         initial_state_select.set_onchange(Some(reset_board_function.as_ref().unchecked_ref()));
 
-        let window_size = canvas_window.inner_size();
+        let window_size = main_window.inner_size();
         let run_state   = RunState::Running;
 
         Self
         {
             event_loop,
             event_loop_proxy,
-            canvas_window,
+            main_window,
+            click_rule_window,
             window_size,
             run_state,
 
@@ -245,17 +248,19 @@ impl AppState
         let event_loop: EventLoop<AppEvent> = EventLoop::with_user_event();
         let event_loop_proxy                = Rc::new(event_loop.create_proxy());
 
-        let canvas_window = WindowBuilder::new().build(&event_loop).unwrap();
+        let main_window       = WindowBuilder::new().build(&event_loop).unwrap();
+        let click_rule_window = WindowBuilder::new().build(&event_loop).unwrap();
 
-        canvas_window.set_inner_size(winit::dpi::LogicalSize {width: 768.0, height: 768.0});
-        let window_size = canvas_window.inner_size();
+        main_window.set_inner_size(winit::dpi::LogicalSize {width: 768.0, height: 768.0});
+        let window_size = main_window.inner_size();
 
         let run_state = RunState::Running;
         Self
         {
             event_loop,
             event_loop_proxy,
-            canvas_window,
+            main_window,
+            click_rule_window,
             window_size,
             run_state
         }
@@ -266,14 +271,16 @@ impl AppState
         #[cfg(target_arch = "wasm32")]
         let document = self.document;
 
-        let canvas_window = self.canvas_window;
-        let event_loop    = self.event_loop;
+        let main_window       = self.main_window;
+        let click_rule_window = self.click_rule_window;
+        let event_loop        = self.event_loop;
 
         let mut window_size = self.window_size;
         let mut run_state   = self.run_state;
 
-        let mut main_state = stafra_state::StafraState::new(&canvas_window, 1023, 1023).await;
-        AppState::reset_board_standard(&mut main_state, &canvas_window, StandardResetBoardType::Corners);
+        let mut main_state = stafra_state::StafraState::new(&main_window, 1023, 1023).await;
+        AppState::reset_board_standard(&mut main_state, &main_window, StandardResetBoardType::Corners);
+        AppState::reset_click_rule(&mut main_state, &click_rule_window);
 
         #[cfg(target_arch = "wasm32")]
         AppState::update_ui(&document, run_state);
@@ -285,7 +292,7 @@ impl AppState
                 ref event,
                 window_id,
             }
-            if window_id == canvas_window.id() => match event
+            if window_id == main_window.id() => match event
             {
                 WindowEvent::CloseRequested =>
                 {
@@ -367,7 +374,7 @@ impl AppState
 
             Event::MainEventsCleared =>
             {
-                canvas_window.request_redraw();
+                main_window.request_redraw();
             }
 
             Event::UserEvent(app_event) =>
@@ -404,7 +411,7 @@ impl AppState
                         #[cfg(target_arch = "wasm32")]
                         AppState::update_ui(&document, run_state);
 
-                        AppState::reset_board_unchanged(&mut main_state, &canvas_window);
+                        AppState::reset_board_unchanged(&mut main_state, &main_window);
                     },
 
                     AppEvent::NextFrame {} =>
@@ -423,19 +430,19 @@ impl AppState
                             {
                                 ResetOption::Corners =>
                                 {
-                                    AppState::reset_board_standard(&mut main_state, &canvas_window, StandardResetBoardType::Corners);
+                                    AppState::reset_board_standard(&mut main_state, &main_window, StandardResetBoardType::Corners);
                                     run_state = RunState::Running;
                                 },
 
                                 ResetOption::Sides =>
                                 {
-                                    AppState::reset_board_standard(&mut main_state, &canvas_window, StandardResetBoardType::Edges);
+                                    AppState::reset_board_standard(&mut main_state, &main_window, StandardResetBoardType::Edges);
                                     run_state = RunState::Running;
                                 },
 
                                 ResetOption::Center =>
                                 {
-                                    AppState::reset_board_standard(&mut main_state, &canvas_window, StandardResetBoardType::Center);
+                                    AppState::reset_board_standard(&mut main_state, &main_window, StandardResetBoardType::Center);
                                     run_state = RunState::Running;
                                 },
 
@@ -454,7 +461,7 @@ impl AppState
                     {
                         #[cfg(target_arch = "wasm32")]
                         {
-                            AppState::reset_board_custom(&mut main_state, &canvas_window, image_data);
+                            AppState::reset_board_custom(&mut main_state, &main_window, image_data);
 
                             run_state = RunState::Running;
 
@@ -505,5 +512,11 @@ impl AppState
     {
         state.reset_board_custom(image_data.data().to_vec(), image_data.width(), image_data.height());
         window.request_redraw();
+    }
+
+    fn reset_click_rule(state: &mut StafraState, click_rule_window: &Window)
+    {
+        state.reset_click_rule();
+        click_rule_window.request_redraw();
     }
 }
