@@ -14,7 +14,8 @@ log = "0.4"
 futures = "0.3.14"
 wasm-bindgen-futures = "0.4.23"
 js-sys = "0.3.50"
-wgpu = {git = "https://github.com/gfx-rs/wgpu", features = ["spirv"]}
+naga = {git = "https://github.com/gfx-rs/naga"}
+wgpu = {git = "https://github.com/gfx-rs/wgpu"}
 wasm-bindgen = "0.2.78"
 console_error_panic_hook = "0.1.6"
 console_log = "0.2.0"

@@ -11,21 +11,21 @@ cd static
 cp ../src/stafra.html stafra.html
 cp ../src/stafra.css stafra.css
 
-${VULKAN_SDK}/x86_64/bin/glslangValidator -V --target-env spirv1.3 -g -o ../target/shaders/clear_4_corners.spv ../src/shaders/clear_board/clear_4_corners.comp
-${VULKAN_SDK}/x86_64/bin/glslangValidator -V --target-env spirv1.3 -g -o ../target/shaders/clear_4_sides.spv   ../src/shaders/clear_board/clear_4_sides.comp
-${VULKAN_SDK}/x86_64/bin/glslangValidator -V --target-env spirv1.3 -g -o ../target/shaders/clear_center.spv    ../src/shaders/clear_board/clear_center.comp
+cp ../src/shaders/clear_board/clear_4_corners.wgsl ../target/shaders/clear_4_corners.wgsl
+cp ../src/shaders/clear_board/clear_4_sides.wgsl   ../target/shaders/clear_4_sides.wgsl
+cp ../src/shaders/clear_board/clear_center.wgsl    ../target/shaders/clear_center.wgsl
 
-${VULKAN_SDK}/x86_64/bin/glslangValidator -V --target-env spirv1.3 -g -o ../target/shaders/next_step.spv ../src/shaders/next_step/next_step.comp
+cp ../src/shaders/next_step/next_step.wgsl ../target/shaders/next_step.wgsl
 
-${VULKAN_SDK}/x86_64/bin/glslangValidator -V --target-env spirv1.3 -g -o ../target/shaders/bake_click_rule.spv ../src/shaders/click_rule/bake_click_rule.comp
+cp ../src/shaders/click_rule/bake_click_rule.wgsl ../target/shaders/bake_click_rule.wgsl
 
-${VULKAN_SDK}/x86_64/bin/glslangValidator -V --target-env spirv1.3 -g -o ../target/shaders/initial_state_transform.spv ../src/shaders/state_transform/initial_state_transform.comp
-${VULKAN_SDK}/x86_64/bin/glslangValidator -V --target-env spirv1.3 -g -o ../target/shaders/final_state_transform.spv   ../src/shaders/state_transform/final_state_transform.comp
-${VULKAN_SDK}/x86_64/bin/glslangValidator -V --target-env spirv1.3 -g -o ../target/shaders/clear_stability.spv         ../src/shaders/state_transform/clear_stability.comp
+cp ../src/shaders/state_transform/initial_state_transform.wgsl ../target/shaders/initial_state_transform.wgsl
+cp ../src/shaders/state_transform/final_state_transform.wgsl   ../target/shaders/final_state_transform.wgsl
+cp ../src/shaders/state_transform/clear_stability.wgsl         ../target/shaders/clear_stability.wgsl
 
-${VULKAN_SDK}/x86_64/bin/glslangValidator -V --target-env spirv1.3 -g -o ../target/shaders/render_state_vs.spv ../src/shaders/render/render_state.vert
-${VULKAN_SDK}/x86_64/bin/glslangValidator -V --target-env spirv1.3 -g -o ../target/shaders/render_state_fs.spv ../src/shaders/render/render_state.frag
+cp ../src/shaders/render/render_state_vs.wgsl ../target/shaders/render_state_vs.wgsl
+cp ../src/shaders/render/render_state_fs.wgsl ../target/shaders/render_state_fs.wgsl
 
-${VULKAN_SDK}/x86_64/bin/glslangValidator -V --target-env spirv1.3 -g -o ../target/shaders/final_state_generate_next_mip.spv ../src/shaders/mip/final_state_generate_next_mip.comp
+cp ../src/shaders/mip/final_state_generate_next_mip.wgsl ../target/shaders/final_state_generate_next_mip.wgsl
 
 cargo run
