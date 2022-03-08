@@ -1,17 +1,23 @@
-use futures::Future;
-use std::num::{NonZeroU32, NonZeroU64};
-use winit::window::Window;
-use std::pin::Pin;
-use std::task::Context;
-use super::dummy_waker;
-use std::cmp::min;
-
-#[derive(Copy, Clone)]
-struct BoardDimensions
+use
 {
-    width:  u32,
-    height: u32
-}
+    futures::Future,
+    std::num::{NonZeroU32, NonZeroU64},
+    std::cmp::min
+};
+
+#[cfg(not(target_arch = "wasm32"))]
+use
+{
+    winit::window::Window
+};
+
+#[cfg(target_arch = "wasm32")]
+use
+{
+    super::dummy_waker,
+    std::task::Context,
+    std::pin::Pin
+};
 
 struct SavePngRequest
 {
@@ -22,7 +28,8 @@ struct SavePngRequest
 
 struct StafraBindingLayouts
 {
-    render_state_bind_group_layout:            wgpu::BindGroupLayout,
+    main_render_state_bind_group_layout:       wgpu::BindGroupLayout,
+    click_rule_render_state_bind_group_layout: wgpu::BindGroupLayout,
     clear_default_bind_group_layout:           wgpu::BindGroupLayout,
     bake_click_rule_bind_group_layout:         wgpu::BindGroupLayout,
     initial_state_transform_bind_group_layout: wgpu::BindGroupLayout,
@@ -37,19 +44,21 @@ struct StafraBindingLayouts
 
 struct StafraBindings
 {
-    board_size: BoardDimensions,
+    board_width:  u32,
+    board_height: u32,
 
-    render_state_bind_group:      wgpu::BindGroup,
-    clear_default_bind_group:     wgpu::BindGroup,
-    bake_click_rule_bind_group:   wgpu::BindGroup,
-    initial_transform_bind_group: wgpu::BindGroup,
-    next_step_bind_group_a:       wgpu::BindGroup,
-    next_step_bind_group_b:       wgpu::BindGroup,
-    final_transform_bind_group_a: wgpu::BindGroup,
-    final_transform_bind_group_b: wgpu::BindGroup,
-    clear_stability_bind_group_a: wgpu::BindGroup,
-    clear_stability_bind_group_b: wgpu::BindGroup,
-    generate_mip_bind_groups:     Vec<wgpu::BindGroup>,
+    main_render_state_bind_group:       wgpu::BindGroup,
+    click_rule_render_state_bind_group: wgpu::BindGroup,
+    clear_default_bind_group:           wgpu::BindGroup,
+    bake_click_rule_bind_group:         wgpu::BindGroup,
+    initial_transform_bind_group:       wgpu::BindGroup,
+    next_step_bind_group_a:             wgpu::BindGroup,
+    next_step_bind_group_b:             wgpu::BindGroup,
+    final_transform_bind_group_a:       wgpu::BindGroup,
+    final_transform_bind_group_b:       wgpu::BindGroup,
+    clear_stability_bind_group_a:       wgpu::BindGroup,
+    clear_stability_bind_group_b:       wgpu::BindGroup,
+    generate_mip_bind_groups:           Vec<wgpu::BindGroup>,
 
     #[allow(dead_code)]
     click_rule_texture: wgpu::Texture,
@@ -86,14 +95,16 @@ enum ResetBoardType
 
 pub struct StafraState
 {
-    surface: wgpu::Surface,
-    device:  wgpu::Device,
-    queue:   wgpu::Queue,
+    main_surface:       wgpu::Surface,
+    click_rule_surface: wgpu::Surface,
+    device:             wgpu::Device,
+    queue:              wgpu::Queue,
 
     swapchain_format: wgpu::TextureFormat,
-    frame_number: u32,
+    frame_number:     u32,
 
-    render_state_pipeline:            wgpu::RenderPipeline,
+    main_render_state_pipeline:       wgpu::RenderPipeline,
+    click_rule_render_state_pipeline: wgpu::RenderPipeline,
     clear_4_corners_pipeline:         wgpu::ComputePipeline,
     clear_4_sides_pipeline:           wgpu::ComputePipeline,
     clear_center_pipeline:            wgpu::ComputePipeline,
@@ -134,7 +145,7 @@ impl StafraBindingLayouts
             }
         }
 
-        macro_rules! render_texture_binding
+        macro_rules! main_render_texture_binding
         {
             ($bd:literal) =>
             {
@@ -153,7 +164,26 @@ impl StafraBindingLayouts
             }
         }
 
-        macro_rules! render_sampler_binding
+        macro_rules! click_rule_render_texture_binding
+        {
+            ($bd:literal) =>
+            {
+                wgpu::BindGroupLayoutEntry
+                {
+                    binding:    $bd,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty:         wgpu::BindingType::Texture
+                    {
+                        sample_type:    wgpu::TextureSampleType::Uint,
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled:   false,
+                    },
+                    count: None
+                }
+            }
+        }
+
+        macro_rules! main_render_sampler_binding
         {
             ($bd:literal) =>
             {
@@ -284,13 +314,42 @@ impl StafraBindingLayouts
             }
         }
 
-        let render_state_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor
+        macro_rules! click_rule_render_flags_binding
+        {
+            ($bd:literal) =>
+            {
+                wgpu::BindGroupLayoutEntry
+                {
+                    binding:    $bd,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty:         wgpu::BindingType::Buffer
+                    {
+                        ty:                 wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size:   NonZeroU64::new(std::mem::size_of::<u32>() as u64)
+                    },
+                    count: None
+                }
+            }
+        }
+
+        let main_render_state_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor
         {
             label: None,
             entries:
             &[
-                render_texture_binding!(0),
-                render_sampler_binding!(1)
+                main_render_texture_binding!(0),
+                main_render_sampler_binding!(1)
+            ]
+        });
+
+        let click_rule_render_state_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor
+        {
+            label: None,
+            entries:
+            &[
+                click_rule_render_texture_binding!(0),
+                click_rule_render_flags_binding!(1)
             ]
         });
 
@@ -385,7 +444,8 @@ impl StafraBindingLayouts
 
         Self
         {
-            render_state_bind_group_layout,
+            main_render_state_bind_group_layout,
+            click_rule_render_state_bind_group_layout,
             clear_default_bind_group_layout,
             bake_click_rule_bind_group_layout,
             initial_state_transform_bind_group_layout,
@@ -406,7 +466,8 @@ impl StafraBindings
         assert!((width  + 1).is_power_of_two());
         assert!((height + 1).is_power_of_two());
 
-        let board_size = BoardDimensions {width, height};
+        let board_width  = width;
+        let board_height = height;
 
         let click_rule_texture_descriptor = wgpu::TextureDescriptor
         {
@@ -429,8 +490,8 @@ impl StafraBindings
             label: None,
             size:  wgpu::Extent3d
             {
-                width:                 board_size.width,
-                height:                board_size.height,
+                width:                 board_width,
+                height:                board_height,
                 depth_or_array_layers: 1
             },
             mip_level_count: 1,
@@ -445,8 +506,8 @@ impl StafraBindings
             label: None,
             size:  wgpu::Extent3d
             {
-                width:                 (board_size.width  + 1) / 2,
-                height:                (board_size.height + 1) / 2,
+                width:                 (board_width  + 1) / 2,
+                height:                (board_height + 1) / 2,
                 depth_or_array_layers: 1
             },
             mip_level_count: 1,
@@ -456,14 +517,14 @@ impl StafraBindings
             usage:           wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::STORAGE_BINDING
         };
 
-        let final_state_mips = (std::cmp::max(board_size.width, board_size.height) as f32).log2().ceil() as u32;
+        let final_state_mips = (std::cmp::max(board_width, board_height) as f32).log2().ceil() as u32;
         let final_state_texture_descriptor = wgpu::TextureDescriptor
         {
             label: None,
             size:  wgpu::Extent3d
             {
-                width:                 (board_size.width  + 1) / 2,
-                height:                (board_size.height + 1) / 2,
+                width:                 (board_width  + 1) / 2,
+                height:                (board_height + 1) / 2,
                 depth_or_array_layers: 1
             },
             mip_level_count: final_state_mips,
@@ -481,6 +542,14 @@ impl StafraBindings
             mapped_at_creation: false
         };
 
+        let click_rule_render_flags_buffer_descriptor = wgpu::BufferDescriptor
+        {
+            label:              None,
+            size:               std::mem::size_of::<u32>() as u64,
+            usage:              wgpu::BufferUsages::UNIFORM,
+            mapped_at_creation: false
+        };
+
         let click_rule_texture = device.create_texture(&click_rule_texture_descriptor);
         let initial_state      = device.create_texture(&initial_state_texture_descriptor);
         let current_board      = device.create_texture(&board_texture_descriptor);
@@ -489,7 +558,8 @@ impl StafraBindings
         let next_stability     = device.create_texture(&board_texture_descriptor);
         let final_state        = device.create_texture(&final_state_texture_descriptor);
 
-        let click_rule_buffer = device.create_buffer(&click_rule_buffer_descriptor);
+        let click_rule_buffer              = device.create_buffer(&click_rule_buffer_descriptor);
+        let click_rule_render_flags_buffer = device.create_buffer(&click_rule_render_flags_buffer_descriptor);
 
         let click_rule_texture_view_descriptor = wgpu::TextureViewDescriptor
         {
@@ -563,10 +633,10 @@ impl StafraBindings
             }));
         }
 
-        let render_state_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor
+        let main_render_state_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor
         {
             label: None,
-            layout: &binding_layouts.render_state_bind_group_layout,
+            layout: &binding_layouts.main_render_state_bind_group_layout,
             entries:
             &[
                 wgpu::BindGroupEntry
@@ -579,6 +649,26 @@ impl StafraBindings
                 {
                     binding: 1,
                     resource: wgpu::BindingResource::Sampler(&binding_layouts.render_state_sampler),
+                }
+            ]
+        });
+
+        let click_rule_render_state_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor
+        {
+            label: None,
+            layout: &binding_layouts.click_rule_render_state_bind_group_layout,
+            entries:
+            &[
+                wgpu::BindGroupEntry
+                {
+                    binding:  0,
+                    resource: wgpu::BindingResource::TextureView(&click_rule_texture_view),
+                },
+
+                wgpu::BindGroupEntry
+                {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Buffer(click_rule_render_flags_buffer.as_entire_buffer_binding()),
                 }
             ]
         });
@@ -807,9 +897,11 @@ impl StafraBindings
 
         Self
         {
-            board_size,
+            board_width,
+            board_height,
 
-            render_state_bind_group,
+            main_render_state_bind_group,
+            click_rule_render_state_bind_group,
             clear_default_bind_group,
             bake_click_rule_bind_group,
             initial_transform_bind_group,
@@ -835,18 +927,38 @@ impl StafraBindings
 
 impl StafraState
 {
-    pub async fn new(window: &Window, width: u32, height: u32) -> Self
+    #[cfg(not(target_arch = "wasm32"))]
+    pub async fn new_native(main_window: &Window, click_rule_window: &Window, width: u32, height: u32) -> Self
     {
-        let window_size = window.inner_size();
+        let window_size = main_window.inner_size();
 
-        let wgpu_instance = wgpu::Instance::new(wgpu::Backends::PRIMARY);
-        let surface = unsafe{wgpu_instance.create_surface(window)};
+        let wgpu_instance      = wgpu::Instance::new(wgpu::Backends::PRIMARY);
+        let main_surface       = unsafe{wgpu_instance.create_surface(main_window)};
+        let click_rule_surface = unsafe{wgpu_instance.create_surface(click_rule_window)};
 
-        let adapter = wgpu_instance.request_adapter(&wgpu::RequestAdapterOptions
+        StafraState::new_impl(wgpu_instance, main_surface, click_rule_surface, window_size.width, window_size.height, width, height).await
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    pub async fn new_web(main_canvas: &web_sys::HtmlCanvasElement, click_rule_canvas: &web_sys::HtmlCanvasElement, width: u32, height: u32) -> Self
+    {
+        let canvas_width  = main_canvas.width();
+        let canvas_height = main_canvas.height();
+
+        let wgpu_instance      = wgpu::Instance::new(wgpu::Backends::PRIMARY);
+        let main_surface       = unsafe{wgpu_instance.create_surface_from_canvas(main_canvas)};
+        let click_rule_surface = unsafe{wgpu_instance.create_surface_from_canvas(click_rule_canvas)};
+
+        StafraState::new_impl(wgpu_instance, main_surface, click_rule_surface, canvas_width, canvas_height, width, height).await
+    }
+
+    async fn new_impl(instance: wgpu::Instance, main_surface: wgpu::Surface, click_rule_surface: wgpu::Surface, window_width: u32, window_height: u32, width: u32, height: u32) -> Self
+    {
+        let adapter = instance.request_adapter(&wgpu::RequestAdapterOptions
         {
             power_preference:       wgpu::PowerPreference::default(),
             force_fallback_adapter: false,
-            compatible_surface:     Some(&surface),
+            compatible_surface:     Some(&main_surface),
         }).await.unwrap();
 
         let (device, queue) = adapter.request_device(&wgpu::DeviceDescriptor
@@ -862,18 +974,30 @@ impl StafraState
             println!("Wgpu error: {}", error);
         });
 
-        let swapchain_format = surface.get_preferred_format(&adapter).unwrap();
-        surface.configure(&device, &wgpu::SurfaceConfiguration
+        let swapchain_format = main_surface.get_preferred_format(&adapter).unwrap();
+        main_surface.configure(&device, &wgpu::SurfaceConfiguration
         {
             usage:        wgpu::TextureUsages::RENDER_ATTACHMENT,
             format:       swapchain_format,
-            width:        window_size.width,
-            height:       window_size.height,
+            width:        window_width,
+            height:       window_height,
             present_mode: wgpu::PresentMode::Fifo
         });
 
-        let render_state_vs_module = device.create_shader_module(&wgpu::include_wgsl!("../target/shaders/render_state_vs.wgsl"));
-        let render_state_fs_module = device.create_shader_module(&wgpu::include_wgsl!("../target/shaders/render_state_fs.wgsl"));
+        click_rule_surface.configure(&device, &wgpu::SurfaceConfiguration
+        {
+            usage:        wgpu::TextureUsages::RENDER_ATTACHMENT,
+            format:       swapchain_format,
+            width:        256,
+            height:       256,
+            present_mode: wgpu::PresentMode::Fifo
+        });
+
+        let main_render_state_vs_module = device.create_shader_module(&wgpu::include_wgsl!("../target/shaders/render_state_vs.wgsl"));
+        let main_render_state_fs_module = device.create_shader_module(&wgpu::include_wgsl!("../target/shaders/render_state_fs.wgsl"));
+
+        let click_rule_render_state_vs_module = device.create_shader_module(&wgpu::include_wgsl!("../target/shaders/click_rule_render_state_vs.wgsl"));
+        let click_rule_render_state_fs_module = device.create_shader_module(&wgpu::include_wgsl!("../target/shaders/click_rule_render_state_fs.wgsl"));
 
         let clear_4_corners_module = device.create_shader_module(&wgpu::include_wgsl!("../target/shaders/clear_4_corners.wgsl"));
         let clear_4_sides_module   = device.create_shader_module(&wgpu::include_wgsl!("../target/shaders/clear_4_sides.wgsl"));
@@ -893,10 +1017,17 @@ impl StafraState
         let binding_layouts = StafraBindingLayouts::new(&device);
         let bindings        = StafraBindings::new(&device, &binding_layouts, width, height);
 
-        let render_state_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor
+        let main_render_state_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor
         {
             label: None,
-            bind_group_layouts: &[&binding_layouts.render_state_bind_group_layout],
+            bind_group_layouts: &[&binding_layouts.main_render_state_bind_group_layout],
+            push_constant_ranges: &[],
+        });
+
+        let click_rule_render_state_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor
+        {
+            label: None,
+            bind_group_layouts: &[&binding_layouts.click_rule_render_state_bind_group_layout],
             push_constant_ranges: &[],
         });
 
@@ -949,21 +1080,65 @@ impl StafraState
             push_constant_ranges: &[],
         });
 
-        let render_state_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor
+        let main_render_state_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor
         {
             label: None,
-            layout: Some(&render_state_pipeline_layout),
+            layout: Some(&main_render_state_pipeline_layout),
 
             vertex: wgpu::VertexState
             {
-                module: &render_state_vs_module,
+                module: &main_render_state_vs_module,
                 entry_point: "main",
                 buffers: &[],
             },
 
             fragment: Some(wgpu::FragmentState
             {
-                module: &render_state_fs_module,
+                module: &main_render_state_fs_module,
+                entry_point: "main",
+                targets:
+                &[
+                    wgpu::ColorTargetState
+                    {
+                        format:     swapchain_format,
+                        blend:      None,
+                        write_mask: wgpu::ColorWrites::ALL,
+                    }
+                ],
+            }),
+
+            depth_stencil: None,
+
+            primitive: wgpu::PrimitiveState
+            {
+                topology:           wgpu::PrimitiveTopology::TriangleList,
+                strip_index_format: None,
+                front_face:         wgpu::FrontFace::Cw,
+                cull_mode:          None,
+                unclipped_depth:    true,
+                polygon_mode:       wgpu::PolygonMode::Fill,
+                conservative:       false
+            },
+
+            multisample: wgpu::MultisampleState::default(),
+            multiview: None
+        });
+
+        let click_rule_render_state_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor
+        {
+            label: None,
+            layout: Some(&click_rule_render_state_pipeline_layout),
+
+            vertex: wgpu::VertexState
+            {
+                module: &click_rule_render_state_vs_module,
+                entry_point: "main",
+                buffers: &[],
+            },
+
+            fragment: Some(wgpu::FragmentState
+            {
+                module: &click_rule_render_state_fs_module,
                 entry_point: "main",
                 targets:
                 &[
@@ -1067,14 +1242,16 @@ impl StafraState
 
         Self
         {
-            surface,
+            main_surface,
+            click_rule_surface,
             device,
             queue,
 
             swapchain_format,
             frame_number: 0,
 
-            render_state_pipeline,
+            main_render_state_pipeline,
+            click_rule_render_state_pipeline,
             clear_4_corners_pipeline,
             clear_4_sides_pipeline,
             clear_center_pipeline,
@@ -1093,18 +1270,19 @@ impl StafraState
         }
     }
 
-    pub fn resize(&mut self, new_size: &winit::dpi::PhysicalSize<u32>)
+    pub fn resize(&mut self, new_width: u32, new_height: u32)
     {
-        self.surface.configure(&self.device, &wgpu::SurfaceConfiguration
+        self.main_surface.configure(&self.device, &wgpu::SurfaceConfiguration
         {
             usage:        wgpu::TextureUsages::RENDER_ATTACHMENT,
             format:       self.swapchain_format,
-            width:        new_size.width,
-            height:       new_size.height,
+            width:        new_width,
+            height:       new_height,
             present_mode: wgpu::PresentMode::Fifo
         });
     }
 
+    #[cfg(target_arch = "wasm32")]
     pub fn post_png_data_request(&mut self)
     {
         if let Some(_) = &self.save_png_request
@@ -1112,8 +1290,8 @@ impl StafraState
             return;
         }
 
-        let real_width  = (self.bindings.board_size.width  + 1) / 2;
-        let real_height = (self.bindings.board_size.height + 1) / 2;
+        let real_width  = (self.bindings.board_width  + 1) / 2;
+        let real_height = (self.bindings.board_height + 1) / 2;
 
         let row_alignment = 256 as usize;
         let row_pitch     = ((real_width as usize * std::mem::size_of::<f32>()) + (row_alignment - 1)) & (!(row_alignment - 1));
@@ -1169,6 +1347,7 @@ impl StafraState
         })
     }
 
+    #[cfg(target_arch = "wasm32")]
     pub fn check_png_data_request(&mut self) -> Result<(Vec<u8>, u32, u32, u32), String>
     {
         if let None = &self.save_png_request
@@ -1190,8 +1369,8 @@ impl StafraState
         {
             std::task::Poll::Ready(_) =>
             {
-                let padded_width  = self.bindings.board_size.width  + 1;
-                let padded_height = self.bindings.board_size.height + 1;
+                let padded_width  = self.bindings.board_width  + 1;
+                let padded_height = self.bindings.board_height + 1;
 
                 let mut image_array = vec![0; (padded_width * padded_height * 4) as usize];
                 {
@@ -1241,7 +1420,7 @@ impl StafraState
 
                 self.save_png_request = None;
 
-                Ok((image_array, self.bindings.board_size.width, self.bindings.board_size.height, padded_width))
+                Ok((image_array, self.bindings.board_width, self.bindings.board_height, padded_width))
             }
 
             std::task::Poll::Pending => Err("Pending".to_string())
@@ -1366,19 +1545,22 @@ impl StafraState
 
     pub fn render(&mut self) -> Result<(), wgpu::SurfaceError>
     {
-        let frame      = self.surface.get_current_texture()?;
-        let frame_view = frame.texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let main_frame       = self.main_surface.get_current_texture()?;
+        let click_rule_frame = self.click_rule_surface.get_current_texture()?;
+
+        let main_frame_view       = main_frame.texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let click_rule_frame_view = click_rule_frame.texture.create_view(&wgpu::TextureViewDescriptor::default());
 
         let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor{label: None});
         {
-            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor
+            let mut main_render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor
             {
                 label: None,
                 color_attachments:
                 &[
                     wgpu::RenderPassColorAttachment
                     {
-                        view:           &frame_view,
+                        view:           &main_frame_view,
                         resolve_target: None,
                         ops:            wgpu::Operations
                         {
@@ -1391,22 +1573,49 @@ impl StafraState
                 depth_stencil_attachment: None,
             });
 
-            render_pass.set_pipeline(&self.render_state_pipeline);
-            render_pass.set_bind_group(0, &self.bindings.render_state_bind_group, &[]);
-            render_pass.draw(0..3, 0..1);
+            main_render_pass.set_pipeline(&self.main_render_state_pipeline);
+            main_render_pass.set_bind_group(0, &self.bindings.main_render_state_bind_group, &[]);
+            main_render_pass.draw(0..3, 0..1);
+        }
+
+        {
+            let mut click_rule_render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor
+            {
+                label: None,
+                color_attachments:
+                &[
+                    wgpu::RenderPassColorAttachment
+                    {
+                        view: &click_rule_frame_view,
+                        resolve_target: None,
+                        ops: wgpu::Operations
+                        {
+                            load:  wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                            store: true,
+                        }
+                    }
+                ],
+
+                depth_stencil_attachment: None
+            });
+
+            click_rule_render_pass.set_pipeline(&self.click_rule_render_state_pipeline);
+            click_rule_render_pass.set_bind_group(0, &self.bindings.click_rule_render_state_bind_group, &[]);
+            click_rule_render_pass.draw(0..3, 0..1);
         }
 
         self.queue.submit(std::iter::once(encoder.finish()));
 
-        frame.present();
+        main_frame.present();
+        click_rule_frame.present();
 
         Ok(())
     }
 
     fn calc_next_frame(&self, encoder: &mut wgpu::CommandEncoder)
     {
-        let thread_groups_x = std::cmp::max((self.bindings.board_size.width + 1) / (2 * 16), 1u32);
-        let thread_groups_y = std::cmp::max((self.bindings.board_size.width + 1) / (2 * 16), 1u32);
+        let thread_groups_x = std::cmp::max((self.bindings.board_width + 1) / (2 * 16), 1u32);
+        let thread_groups_y = std::cmp::max((self.bindings.board_height + 1) / (2 * 16), 1u32);
 
         {
             let mut next_step_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {label: None});
@@ -1419,8 +1628,8 @@ impl StafraState
 
     fn generate_final_image(&self, encoder: &mut wgpu::CommandEncoder)
     {
-        let thread_groups_x = std::cmp::max((self.bindings.board_size.width + 1) / (2 * 16), 1u32);
-        let thread_groups_y = std::cmp::max((self.bindings.board_size.width + 1) / (2 * 16), 1u32);
+        let thread_groups_x = std::cmp::max((self.bindings.board_width  + 1) / (2 * 16), 1u32);
+        let thread_groups_y = std::cmp::max((self.bindings.board_height + 1) / (2 * 16), 1u32);
 
         {
             let mut final_transform_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {label: None});
@@ -1447,8 +1656,8 @@ impl StafraState
 
     fn reset_board_standard_impl(&mut self, reset_type: StandardResetBoardType)
     {
-        let thread_groups_x = std::cmp::max((self.bindings.board_size.width + 1) / (2 * 16), 1u32);
-        let thread_groups_y = std::cmp::max((self.bindings.board_size.width + 1) / (2 * 16), 1u32);
+        let thread_groups_x = std::cmp::max((self.bindings.board_width  + 1) / (2 * 16), 1u32);
+        let thread_groups_y = std::cmp::max((self.bindings.board_height + 1) / (2 * 16), 1u32);
 
         let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor{label: None});
 
@@ -1495,8 +1704,8 @@ impl StafraState
 
     fn reset_board_custom_impl(&mut self)
     {
-        let thread_groups_x = std::cmp::max((self.bindings.board_size.width + 1) / (2 * 16), 1u32);
-        let thread_groups_y = std::cmp::max((self.bindings.board_size.width + 1) / (2 * 16), 1u32);
+        let thread_groups_x = std::cmp::max((self.bindings.board_width  + 1) / (2 * 16), 1u32);
+        let thread_groups_y = std::cmp::max((self.bindings.board_height + 1) / (2 * 16), 1u32);
 
         let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor{label: None});
 
@@ -1526,8 +1735,8 @@ impl StafraState
 
     fn clear_stability(&self, encoder: &mut wgpu::CommandEncoder)
     {
-        let thread_groups_x = std::cmp::max((self.bindings.board_size.width + 1) / (2 * 16), 1u32);
-        let thread_groups_y = std::cmp::max((self.bindings.board_size.width + 1) / (2 * 16), 1u32);
+        let thread_groups_x = std::cmp::max((self.bindings.board_width  + 1) / (2 * 16), 1u32);
+        let thread_groups_y = std::cmp::max((self.bindings.board_height + 1) / (2 * 16), 1u32);
 
         {
             let mut clear_stability_pass_a = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {label: None});

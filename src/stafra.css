@@ -1,3 +1,9 @@
+canvas
+{
+    width:  2em;
+    height: 2em;
+}
+
 #stafra_canvas
 {
     width:  95vmin !important;
@@ -7,6 +13,8 @@
 #click_rule_canvas
 {
     margin-top: 2em;
+    width:      2em;
+    height:     2em;
 }
 
 #container

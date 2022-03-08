@@ -1,3 +1,5 @@
+#![cfg(target_arch = "wasm32")]
+
 use std::task::{RawWakerVTable, RawWaker, Waker};
 
 pub fn dummy_waker() -> Waker

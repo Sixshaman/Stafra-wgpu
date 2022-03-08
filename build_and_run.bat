@@ -13,8 +13,10 @@ set RUST_LOG=info
 echo F|xcopy /Y /F "../src/stafra.html" "./stafra.html"
 echo F|xcopy /Y /F "../src/stafra.css"  "./stafra.css"
 
-echo F|xcopy /Y /F "../src/shaders/render/render_state_vs.wgsl" "../target/shaders/render_state_vs.wgsl"
-echo F|xcopy /Y /F "../src/shaders/render/render_state_fs.wgsl" "../target/shaders/render_state_fs.wgsl"
+echo F|xcopy /Y /F "../src/shaders/render/render_state_vs.wgsl"            "../target/shaders/render_state_vs.wgsl"
+echo F|xcopy /Y /F "../src/shaders/render/render_state_fs.wgsl"            "../target/shaders/render_state_fs.wgsl"
+echo F|xcopy /Y /F "../src/shaders/render/click_rule_render_state_vs.wgsl" "../target/shaders/click_rule_render_state_vs.wgsl"
+echo F|xcopy /Y /F "../src/shaders/render/click_rule_render_state_fs.wgsl" "../target/shaders/click_rule_render_state_fs.wgsl"
 
 echo F|xcopy /Y /F "../src/shaders/clear_board/clear_4_corners.wgsl" "../target/shaders/clear_4_corners.wgsl"
 echo F|xcopy /Y /F "../src/shaders/clear_board/clear_4_sides.wgsl"   "../target/shaders/clear_4_sides.wgsl"

@@ -22,8 +22,10 @@ cp ../src/shaders/state_transform/initial_state_transform.wgsl ../target/shaders
 cp ../src/shaders/state_transform/final_state_transform.wgsl   ../target/shaders/final_state_transform.wgsl
 cp ../src/shaders/state_transform/clear_stability.wgsl         ../target/shaders/clear_stability.wgsl
 
-cp ../src/shaders/render/render_state_vs.wgsl ../target/shaders/render_state_vs.wgsl
-cp ../src/shaders/render/render_state_fs.wgsl ../target/shaders/render_state_fs.wgsl
+cp ../src/shaders/render/render_state_vs.wgsl            ../target/shaders/render_state_vs.wgsl
+cp ../src/shaders/render/render_state_fs.wgsl            ../target/shaders/render_state_fs.wgsl
+cp ../src/shaders/render/click_rule_render_state_vs.wgsl ../target/shaders/click_rule_render_state_vs.wgsl
+cp ../src/shaders/render/click_rule_render_state_fs.wgsl ../target/shaders/click_rule_render_state_fs.wgsl
 
 cp ../src/shaders/mip/final_state_generate_next_mip.wgsl ../target/shaders/final_state_generate_next_mip.wgsl
 

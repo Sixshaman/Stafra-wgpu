@@ -1,8 +1,13 @@
+cargo-features = ["edition2021"]
+
+[build]
+target = "wasm32-unknown-unknown"
+
 [package]
 authors = ["Sixshaman <shaman1234@gmail.com>"]
-edition = "2018"
+edition = "2021"
 name = "stafra_wgpu"
-version = "0.1.0"
+version = "0.1.1"
 resolver = "2"
 
 [dependencies]
