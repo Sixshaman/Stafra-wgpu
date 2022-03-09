@@ -930,29 +930,33 @@ impl StafraState
     #[cfg(not(target_arch = "wasm32"))]
     pub async fn new_native(main_window: &Window, click_rule_window: &Window, width: u32, height: u32) -> Self
     {
-        let window_size = main_window.inner_size();
+        let window_size     = main_window.inner_size();
+        let click_rule_size = click_rule_window.inner_size();
 
         let wgpu_instance      = wgpu::Instance::new(wgpu::Backends::PRIMARY);
         let main_surface       = unsafe{wgpu_instance.create_surface(main_window)};
         let click_rule_surface = unsafe{wgpu_instance.create_surface(click_rule_window)};
 
-        StafraState::new_impl(wgpu_instance, main_surface, click_rule_surface, window_size.width, window_size.height, width, height).await
+        StafraState::new_impl(wgpu_instance, main_surface, click_rule_surface, window_size.width, window_size.height, click_rule_size.width, click_rule_size.height, width, height).await
     }
 
     #[cfg(target_arch = "wasm32")]
     pub async fn new_web(main_canvas: &web_sys::HtmlCanvasElement, click_rule_canvas: &web_sys::HtmlCanvasElement, width: u32, height: u32) -> Self
     {
-        let canvas_width  = main_canvas.width();
-        let canvas_height = main_canvas.height();
+        let canvas_width  = main_canvas.client_width();
+        let canvas_height = main_canvas.client_height();
+
+        let click_rule_width  = click_rule_canvas.client_width();
+        let click_rule_height = click_rule_canvas.client_height();
 
         let wgpu_instance      = wgpu::Instance::new(wgpu::Backends::PRIMARY);
         let main_surface       = unsafe{wgpu_instance.create_surface_from_canvas(main_canvas)};
         let click_rule_surface = unsafe{wgpu_instance.create_surface_from_canvas(click_rule_canvas)};
 
-        StafraState::new_impl(wgpu_instance, main_surface, click_rule_surface, canvas_width, canvas_height, width, height).await
+        StafraState::new_impl(wgpu_instance, main_surface, click_rule_surface, canvas_width as u32, canvas_height as u32, click_rule_width as u32, click_rule_height as u32, width, height).await
     }
 
-    async fn new_impl(instance: wgpu::Instance, main_surface: wgpu::Surface, click_rule_surface: wgpu::Surface, window_width: u32, window_height: u32, width: u32, height: u32) -> Self
+    async fn new_impl(instance: wgpu::Instance, main_surface: wgpu::Surface, click_rule_surface: wgpu::Surface, window_width: u32, window_height: u32, click_rule_width: u32, click_rule_height: u32, board_width: u32, board_height: u32) -> Self
     {
         let adapter = instance.request_adapter(&wgpu::RequestAdapterOptions
         {
@@ -988,8 +992,8 @@ impl StafraState
         {
             usage:        wgpu::TextureUsages::RENDER_ATTACHMENT,
             format:       swapchain_format,
-            width:        256,
-            height:       256,
+            width:        click_rule_width,
+            height:       click_rule_height,
             present_mode: wgpu::PresentMode::Fifo
         });
 
@@ -1015,7 +1019,7 @@ impl StafraState
         let generate_mip_module = device.create_shader_module(&wgpu::include_wgsl!("../target/shaders/final_state_generate_next_mip.wgsl"));
 
         let binding_layouts = StafraBindingLayouts::new(&device);
-        let bindings        = StafraBindings::new(&device, &binding_layouts, width, height);
+        let bindings        = StafraBindings::new(&device, &binding_layouts, board_width, board_height);
 
         let main_render_state_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor
         {
@@ -1282,6 +1286,18 @@ impl StafraState
         });
     }
 
+    pub fn resize_click_rule(&mut self, new_width: u32, new_height: u32)
+    {
+        self.click_rule_surface.configure(&self.device, &wgpu::SurfaceConfiguration
+        {
+            usage:        wgpu::TextureUsages::RENDER_ATTACHMENT,
+            format:       self.swapchain_format,
+            width:        new_width,
+            height:       new_height,
+            present_mode: wgpu::PresentMode::Fifo
+        });
+    }
+
     #[cfg(target_arch = "wasm32")]
     pub fn post_png_data_request(&mut self)
     {
@@ -1483,7 +1499,7 @@ impl StafraState
     pub fn reset_click_rule(&mut self)
     {
         let click_rule_size = 32;
-        let mut click_rule_byte_data = vec![0u8; click_rule_size * click_rule_size * 4];
+        let mut click_rule_byte_data = vec![0u8; click_rule_size * click_rule_size * std::mem::size_of::<u32>()];
 
         let center_cell_xy = (click_rule_size - 1) / 2;
         let left_cell_x    = center_cell_xy - 1;
@@ -1497,7 +1513,7 @@ impl StafraState
         let top_cell_byte_start_index    = (top_cell_y     * click_rule_size + center_cell_xy) * 4;
         let bottom_cell_byte_start_index = (bottom_cell_y  * click_rule_size + center_cell_xy) * 4;
 
-        //Set the LSB of the each u32 to 1
+        //Set the LSB of each u32 to 1
         click_rule_byte_data[center_cell_byte_start_index] = 1;
         click_rule_byte_data[left_cell_byte_start_index]   = 1;
         click_rule_byte_data[right_cell_byte_start_index]  = 1;

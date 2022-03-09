@@ -77,6 +77,26 @@ pub async fn run_event_loop()
                     _ => {}
                 }
             }
+
+            if window_id == click_rule_window.id()
+            {
+                match window_event
+                {
+                    WindowEvent::Resized(physical_size) =>
+                    {
+                        let click_rule_size = *physical_size;
+                        main_state.resize_click_rule(click_rule_size.width, click_rule_size.height);
+                    }
+
+                    WindowEvent::ScaleFactorChanged {new_inner_size, ..} =>
+                    {
+                        let click_rule_size = **new_inner_size;
+                        main_state.resize_click_rule(click_rule_size.width, click_rule_size.height);
+                    }
+
+                    _ => {}
+                }
+            }
         }
 
         Event::RedrawRequested(_) =>

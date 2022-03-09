@@ -31,6 +31,13 @@ pub async fn run_event_loop()
     let initial_state_upload_input = document.get_element_by_id("board_input").unwrap().dyn_into::<web_sys::HtmlInputElement>().unwrap();
 
 
+    //Apparently it's necessary to do it, width and height are not set up automatically
+    main_canvas.set_width((main_canvas.client_width() as f64 * window.device_pixel_ratio()) as u32);
+    main_canvas.set_height((main_canvas.client_height() as f64 * window.device_pixel_ratio()) as u32);
+    click_rule_canvas.set_width((click_rule_canvas.client_width() as f64 * window.device_pixel_ratio()) as u32);
+    click_rule_canvas.set_height((click_rule_canvas.client_height() as f64 * window.device_pixel_ratio()) as u32);
+
+
     //Initializing the state
     let initial_width  = 1023;
     let initial_height = 1023;
@@ -48,8 +55,6 @@ pub async fn run_event_loop()
 
 
     //Creating closures
-    let canvas_resize_closure = create_canvas_resize_closure(stafra_state_rc.clone());
-
     let save_png_closure = create_save_png_closure(stafra_state_rc.clone());
 
     let play_pause_closure = create_play_pause_closure(app_state_rc.clone());
@@ -62,8 +67,6 @@ pub async fn run_event_loop()
 
 
     //Setting closures
-    main_canvas.set_onresize(Some(canvas_resize_closure.as_ref().unchecked_ref()));
-
     save_png_button.set_onclick(Some(save_png_closure.as_ref().unchecked_ref()));
 
     play_pause_button.set_onclick(Some(play_pause_closure.as_ref().unchecked_ref()));
@@ -78,6 +81,13 @@ pub async fn run_event_loop()
     //Refresh handler
     let app_state_clone_for_refresh = app_state_rc.clone();
     let stafra_state_clone_for_refresh = stafra_state_rc.clone();
+
+    //Apparently the only way to detect canvas resize is to keep track of its size and compare it to the actual one each frame
+    let mut current_main_canvas_width        = main_canvas.client_width();
+    let mut current_main_canvas_height       = main_canvas.client_height();
+    let mut current_click_rule_canvas_width  = click_rule_canvas.client_width();
+    let mut current_click_rule_canvas_height = click_rule_canvas.client_height();
+
     let refresh_function: Rc<RefCell<Option<Closure<dyn FnMut()>>>> = Rc::new(RefCell::new(None));
     let refresh_function_copy = refresh_function.clone();
     *refresh_function_copy.borrow_mut() = Some(Closure::wrap(Box::new(move ||
@@ -105,6 +115,27 @@ pub async fn run_event_loop()
             Err(_) =>
             {
             }
+        }
+
+        //Update and resize surfaces
+        let main_canvas_width  = main_canvas.client_width();
+        let main_canvas_height = main_canvas.client_height();
+        if main_canvas_width != current_main_canvas_width || main_canvas_height != current_main_canvas_height
+        {
+            current_main_canvas_width  = main_canvas_width;
+            current_main_canvas_height = main_canvas_height;
+
+            stafra_state.resize(current_main_canvas_width as u32, current_main_canvas_height as u32);
+        }
+
+        let click_rule_canvas_width  = click_rule_canvas.client_width();
+        let click_rule_canvas_height = click_rule_canvas.client_height();
+        if click_rule_canvas_width != current_click_rule_canvas_width || click_rule_canvas_height != current_click_rule_canvas_height
+        {
+            current_click_rule_canvas_width  = click_rule_canvas_width;
+            current_click_rule_canvas_height = click_rule_canvas_height;
+
+            stafra_state.resize_click_rule(current_click_rule_canvas_width as u32, current_click_rule_canvas_height as u32);
         }
 
         //Display state
@@ -142,24 +173,12 @@ pub async fn run_event_loop()
 
 
     //Forget the closures to keep them alive
-    canvas_resize_closure.forget();
     save_png_closure.forget();
     play_pause_closure.forget();
     stop_closure.forget();
     next_frame_closure.forget();
     initial_state_upload_input_closure.forget();
     select_initial_state_closure.forget();
-}
-
-fn create_canvas_resize_closure(stafra_state_rc: Rc<RefCell<stafra_state::StafraState>>) -> Closure<dyn Fn(web_sys::Event)>
-{
-    Closure::wrap(Box::new(move |event: web_sys::Event|
-    {
-        let mut stafra_state = stafra_state_rc.borrow_mut();
-
-        let canvas = event.target().unwrap().dyn_into::<web_sys::HtmlCanvasElement>().unwrap();
-        stafra_state.resize(canvas.client_width() as u32, canvas.client_height() as u32);
-    }) as Box<dyn Fn(web_sys::Event)>)
 }
 
 fn create_save_png_closure(stafra_state_rc: Rc<RefCell<stafra_state::StafraState>>) -> Closure<dyn Fn()>

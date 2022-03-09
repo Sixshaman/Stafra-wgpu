@@ -1,9 +1,3 @@
-canvas
-{
-    width:  2em;
-    height: 2em;
-}
-
 #stafra_canvas
 {
     width:  95vmin !important;
@@ -12,9 +6,10 @@ canvas
 
 #click_rule_canvas
 {
-    margin-top: 2em;
-    width:      2em;
-    height:     2em;
+    margin-top:   2em;
+    width:        100%;
+    height:       auto;
+    aspect-ratio: 1;
 }
 
 #container
@@ -28,6 +23,7 @@ canvas
 {
     display:        flex;
     flex-direction: column;
+    margin-left:    1em;
 }
 
 #initial_state_menu
