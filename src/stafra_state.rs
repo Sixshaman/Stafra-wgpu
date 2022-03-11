@@ -538,7 +538,7 @@ impl StafraBindings
         {
             label:              None,
             size:               4 * std::mem::size_of::<i32>() as u64 + 32 * 32 * 2 * std::mem::size_of::<i32>() as u64,
-            usage:              wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::STORAGE,
+            usage:              wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false
         };
 
@@ -943,11 +943,11 @@ impl StafraState
     #[cfg(target_arch = "wasm32")]
     pub async fn new_web(main_canvas: &web_sys::HtmlCanvasElement, click_rule_canvas: &web_sys::HtmlCanvasElement, width: u32, height: u32) -> Self
     {
-        let canvas_width  = main_canvas.client_width();
-        let canvas_height = main_canvas.client_height();
+        let canvas_width  = main_canvas.width();
+        let canvas_height = main_canvas.height();
 
-        let click_rule_width  = click_rule_canvas.client_width();
-        let click_rule_height = click_rule_canvas.client_height();
+        let click_rule_width  = click_rule_canvas.width();
+        let click_rule_height = click_rule_canvas.height();
 
         let wgpu_instance      = wgpu::Instance::new(wgpu::Backends::PRIMARY);
         let main_surface       = unsafe{wgpu_instance.create_surface_from_canvas(main_canvas)};
@@ -1397,6 +1397,10 @@ impl StafraState
                         for (column_index, texel_bytes) in row_chunk.chunks(4).enumerate()
                         {
                             let real_column_index = (column_index * 2) as u32;
+                            if real_column_index >= padded_width
+                            {
+                                break; //Can be bigger than real width if row_pitch is big enough
+                            }
 
                             //Decode the quad
                             let topleft  = texel_bytes[0] as f32;
@@ -1543,6 +1547,8 @@ impl StafraState
 
         let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor{label: None});
         self.bake_click_rule(&mut encoder);
+
+        self.queue.submit(std::iter::once(encoder.finish()));
     }
 
     pub fn update(&mut self)
@@ -1630,8 +1636,8 @@ impl StafraState
 
     fn calc_next_frame(&self, encoder: &mut wgpu::CommandEncoder)
     {
-        let thread_groups_x = std::cmp::max((self.bindings.board_width + 1) / (2 * 16), 1u32);
-        let thread_groups_y = std::cmp::max((self.bindings.board_height + 1) / (2 * 16), 1u32);
+        let thread_groups_x = std::cmp::max((self.bindings.board_width + 1) / (2 * 8), 1u32);
+        let thread_groups_y = std::cmp::max((self.bindings.board_height + 1) / (2 * 8), 1u32);
 
         {
             let mut next_step_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {label: None});
@@ -1777,6 +1783,11 @@ impl StafraState
         let workgroup_size          = 8;
 
         let thread_group_size = click_rule_texture_size / workgroup_size;
+
+        let click_rule_buffer_size = 4 * std::mem::size_of::<u32>() + 32 * 32 * 2 * std::mem::size_of::<i32>();
+        let click_rule_buffer_data = vec![0u8; click_rule_buffer_size];
+
+        self.queue.write_buffer(&self.bindings.click_rule_buffer, 0, click_rule_buffer_data.as_slice());
 
         {
             let mut bake_click_rule_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {label: None});

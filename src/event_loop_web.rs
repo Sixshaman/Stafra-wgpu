@@ -32,9 +32,9 @@ pub async fn run_event_loop()
 
 
     //Apparently it's necessary to do it, width and height are not set up automatically
-    main_canvas.set_width((main_canvas.client_width() as f64 * window.device_pixel_ratio()) as u32);
+    main_canvas.set_width((main_canvas.client_width()   as f64 * window.device_pixel_ratio()) as u32);
     main_canvas.set_height((main_canvas.client_height() as f64 * window.device_pixel_ratio()) as u32);
-    click_rule_canvas.set_width((click_rule_canvas.client_width() as f64 * window.device_pixel_ratio()) as u32);
+    click_rule_canvas.set_width((click_rule_canvas.client_width()   as f64 * window.device_pixel_ratio()) as u32);
     click_rule_canvas.set_height((click_rule_canvas.client_height() as f64 * window.device_pixel_ratio()) as u32);
 
 
@@ -83,10 +83,10 @@ pub async fn run_event_loop()
     let stafra_state_clone_for_refresh = stafra_state_rc.clone();
 
     //Apparently the only way to detect canvas resize is to keep track of its size and compare it to the actual one each frame
-    let mut current_main_canvas_width        = main_canvas.client_width();
-    let mut current_main_canvas_height       = main_canvas.client_height();
-    let mut current_click_rule_canvas_width  = click_rule_canvas.client_width();
-    let mut current_click_rule_canvas_height = click_rule_canvas.client_height();
+    let mut current_main_canvas_width        = main_canvas.width();
+    let mut current_main_canvas_height       = main_canvas.height();
+    let mut current_click_rule_canvas_width  = click_rule_canvas.width();
+    let mut current_click_rule_canvas_height = click_rule_canvas.height();
 
     let refresh_function: Rc<RefCell<Option<Closure<dyn FnMut()>>>> = Rc::new(RefCell::new(None));
     let refresh_function_copy = refresh_function.clone();
@@ -118,8 +118,8 @@ pub async fn run_event_loop()
         }
 
         //Update and resize surfaces
-        let main_canvas_width  = main_canvas.client_width();
-        let main_canvas_height = main_canvas.client_height();
+        let main_canvas_width  = main_canvas.width();
+        let main_canvas_height = main_canvas.height();
         if main_canvas_width != current_main_canvas_width || main_canvas_height != current_main_canvas_height
         {
             current_main_canvas_width  = main_canvas_width;
@@ -128,8 +128,8 @@ pub async fn run_event_loop()
             stafra_state.resize(current_main_canvas_width as u32, current_main_canvas_height as u32);
         }
 
-        let click_rule_canvas_width  = click_rule_canvas.client_width();
-        let click_rule_canvas_height = click_rule_canvas.client_height();
+        let click_rule_canvas_width  = click_rule_canvas.width();
+        let click_rule_canvas_height = click_rule_canvas.height();
         if click_rule_canvas_width != current_click_rule_canvas_width || click_rule_canvas_height != current_click_rule_canvas_height
         {
             current_click_rule_canvas_width  = click_rule_canvas_width;
