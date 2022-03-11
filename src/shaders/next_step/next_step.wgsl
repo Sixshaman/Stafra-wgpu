@@ -57,17 +57,19 @@ fn calculate_quad_index(local_thread_id: vec2<u32>, quad_offset: vec2<i32>, extr
     return (local_thread_id.y + top_offset) * quad_shared_state_width + (local_thread_id.x + left_offset);
 }
 
-fn calculate_quad_mask(global_thread_id: vec2<u32>, quad_offset: vec2<i32>, board_size_quads: vec2<u32>) -> u32
+fn calculate_quad_mask(global_thread_id: vec2<u32>, quad_offset: vec2<i32>, board_size_quads: vec2<i32>) -> u32
 {
     let left_quad_mask:   u32 = 0x00ff00ffu;
     let right_quad_mask:  u32 = 0xff00ff00u;
     let top_quad_mask:    u32 = 0x0000ffffu;
     let bottom_quad_mask: u32 = 0xffff0000u;
 
-    let left_quad_mask_board:   u32 = left_quad_mask   * u32(global_thread_id.x < board_size_quads.x);
-    let right_quad_mask_board:  u32 = right_quad_mask  * u32(global_thread_id.x < board_size_quads.x - 1u);
-    let top_quad_mask_board:    u32 = top_quad_mask    * u32(global_thread_id.y < board_size_quads.y);
-    let bottom_quad_mask_board: u32 = bottom_quad_mask * u32(global_thread_id.y < board_size_quads.y - 1u);
+    let quad_coord = vec2<i32>(global_thread_id) + quad_offset;
+
+    let left_quad_mask_board:   u32 = left_quad_mask   * u32(quad_coord.x < board_size_quads.x     && quad_coord.x >= 0);
+    let right_quad_mask_board:  u32 = right_quad_mask  * u32(quad_coord.x < board_size_quads.x - 1 && quad_coord.x >= 0);
+    let top_quad_mask_board:    u32 = top_quad_mask    * u32(quad_coord.y < board_size_quads.y     && quad_coord.y >= 0);
+    let bottom_quad_mask_board: u32 = bottom_quad_mask * u32(quad_coord.y < board_size_quads.y - 1 && quad_coord.y >= 0);
 
     return (left_quad_mask_board | right_quad_mask_board) & (top_quad_mask_board | bottom_quad_mask_board);
 }
@@ -156,11 +158,13 @@ fn main(@builtin(local_invocation_id) local_thread_id: vec3<u32>, @builtin(globa
     let extra_radius:       u32 = radius - 1u;
     let extra_radius_quads: u32 = (extra_radius + 1u) / 2u;
 
+    let board_size     = textureDimensions(next_board);
+    let this_quad_mask = calculate_quad_mask(global_thread_id.xy, vec2<i32>(0, 0), board_size);
+
     let quad_state_index: u32 = calculate_quad_index(local_thread_id.xy, vec2<i32>(0), extra_radius_quads);
     let prev_board_quad:  u32 = textureLoad(prev_board, vec2<i32>(global_thread_id.xy), 0).x;
-    shared_quad_states[quad_state_index] = prev_board_quad;
+    shared_quad_states[quad_state_index] = prev_board_quad & this_quad_mask;
 
-    let board_size = vec2<u32>(textureDimensions(next_board));
     if(extra_radius_quads > 0u)
     {
         //Save eight extra 8x8 blocks into cache:
@@ -274,9 +278,7 @@ fn main(@builtin(local_invocation_id) local_thread_id: vec3<u32>, @builtin(globa
 
     workgroupBarrier();
 
-    let this_quad_mask: u32 = calculate_quad_mask(global_thread_id.xy, vec2<i32>(0, 0), board_size);
     let modulo_2_mask: u32 = 0x01010101u & this_quad_mask;
-
     let packed_element_count = i32(element_count / 2u);
 
     var next_board_quad: u32 = 0x00000000u;
