@@ -327,6 +327,13 @@ fn create_board_upload_input_closure(stafra_state_rc: Rc<RefCell<stafra_state::S
         stafra_state.reset_board_custom(image_data.data().to_vec(), image_data.width(), image_data.height());
 
         canvas_board.remove();
+
+        let size_select = document.get_element_by_id("sizes").unwrap().dyn_into::<web_sys::HtmlSelectElement>().unwrap();
+        let new_size = std::cmp::min(stafra_state.board_width(), stafra_state.board_height());
+
+        let size_index = (std::mem::size_of::<u32>() * 8) as u32 - new_size.leading_zeros() - 1;
+        size_select.set_selected_index(size_index as i32);
+
     }) as Box<dyn Fn(web_sys::Event)>);
 
     let board_upload_image_element = web_sys::HtmlImageElement::new().unwrap();
