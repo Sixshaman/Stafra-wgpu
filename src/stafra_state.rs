@@ -42,15 +42,26 @@ struct StafraBindingLayouts
     render_state_sampler: wgpu::Sampler
 }
 
-struct StafraBindings
+struct StafraClickRuleBindings
+{
+    click_rule_render_state_bind_group: wgpu::BindGroup,
+    bake_click_rule_bind_group:         wgpu::BindGroup,
+
+    #[allow(dead_code)]
+    click_rule_texture:             wgpu::Texture,
+    #[allow(dead_code)]
+    click_rule_buffer:              wgpu::Buffer,
+    #[allow(dead_code)]
+    click_rule_render_flags_buffer: wgpu::Buffer,
+}
+
+struct StafraBoardBindings
 {
     board_width:  u32,
     board_height: u32,
 
     main_render_state_bind_group:       wgpu::BindGroup,
-    click_rule_render_state_bind_group: wgpu::BindGroup,
     clear_default_bind_group:           wgpu::BindGroup,
-    bake_click_rule_bind_group:         wgpu::BindGroup,
     initial_transform_bind_group:       wgpu::BindGroup,
     next_step_bind_group_a:             wgpu::BindGroup,
     next_step_bind_group_b:             wgpu::BindGroup,
@@ -61,23 +72,17 @@ struct StafraBindings
     generate_mip_bind_groups:           Vec<wgpu::BindGroup>,
 
     #[allow(dead_code)]
-    click_rule_texture:             wgpu::Texture,
+    initial_state:     wgpu::Texture,
     #[allow(dead_code)]
-    initial_state:                  wgpu::Texture,
+    current_board:     wgpu::Texture,
     #[allow(dead_code)]
-    current_board:                  wgpu::Texture,
+    next_board:        wgpu::Texture,
     #[allow(dead_code)]
-    next_board:                     wgpu::Texture,
+    current_stability: wgpu::Texture,
     #[allow(dead_code)]
-    current_stability:              wgpu::Texture,
+    next_stability:    wgpu::Texture,
     #[allow(dead_code)]
-    next_stability:                 wgpu::Texture,
-    #[allow(dead_code)]
-    final_state:                    wgpu::Texture,
-    #[allow(dead_code)]
-    click_rule_buffer:              wgpu::Buffer,
-    #[allow(dead_code)]
-    click_rule_render_flags_buffer: wgpu::Buffer,
+    final_state:       wgpu::Texture
 }
 
 #[derive(Copy, Clone, PartialEq)]
@@ -122,8 +127,9 @@ pub struct StafraState
 
     click_rule_render_flags: u32,
 
-    binding_layouts: StafraBindingLayouts,
-    bindings:        StafraBindings,
+    binding_layouts:     StafraBindingLayouts,
+    click_rule_bindings: StafraClickRuleBindings,
+    board_bindings:      StafraBoardBindings,
 }
 
 impl StafraBindingLayouts
@@ -463,23 +469,19 @@ impl StafraBindingLayouts
     }
 }
 
-impl StafraBindings
+impl StafraClickRuleBindings
 {
-    fn new(device: &wgpu::Device, binding_layouts: &StafraBindingLayouts, width: u32, height: u32) -> Self
+    fn new(device: &wgpu::Device, binding_layouts: &StafraBindingLayouts) -> Self
     {
-        assert!((width  + 1).is_power_of_two());
-        assert!((height + 1).is_power_of_two());
-
-        let board_width  = width;
-        let board_height = height;
+        let click_rule_size = 32;
 
         let click_rule_texture_descriptor = wgpu::TextureDescriptor
         {
             label: None,
             size:  wgpu::Extent3d
             {
-                width:                 32,
-                height:                32,
+                width:                 click_rule_size,
+                height:                click_rule_size,
                 depth_or_array_layers: 1
             },
             mip_level_count: 1,
@@ -488,6 +490,102 @@ impl StafraBindings
             format:          wgpu::TextureFormat::R32Uint,
             usage:           wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::STORAGE_BINDING | wgpu::TextureUsages::COPY_DST
         };
+
+        let click_rule_buffer_descriptor = wgpu::BufferDescriptor
+        {
+            label:              None,
+            size:               4 * std::mem::size_of::<i32>() as u64 + ((click_rule_size * click_rule_size * 2) as u64) * std::mem::size_of::<i32>() as u64,
+            usage:              wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false
+        };
+
+        let click_rule_render_flags_buffer_descriptor = wgpu::BufferDescriptor
+        {
+            label:              None,
+            size:               std::mem::size_of::<u32>() as u64,
+            usage:              wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false
+        };
+
+        let click_rule_texture             = device.create_texture(&click_rule_texture_descriptor);
+        let click_rule_buffer              = device.create_buffer(&click_rule_buffer_descriptor);
+        let click_rule_render_flags_buffer = device.create_buffer(&click_rule_render_flags_buffer_descriptor);
+
+        let click_rule_texture_view_descriptor = wgpu::TextureViewDescriptor
+        {
+            label:             None,
+            format:            Some(wgpu::TextureFormat::R32Uint),
+            dimension:         Some(wgpu::TextureViewDimension::D2),
+            aspect:            wgpu::TextureAspect::All,
+            base_mip_level:    0,
+            mip_level_count:   None,
+            base_array_layer:  0,
+            array_layer_count: None
+        };
+
+        let click_rule_texture_view = click_rule_texture.create_view(&click_rule_texture_view_descriptor);
+
+        let click_rule_render_state_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor
+        {
+            label: None,
+            layout: &binding_layouts.click_rule_render_state_bind_group_layout,
+            entries:
+            &[
+                wgpu::BindGroupEntry
+                {
+                    binding:  0,
+                    resource: wgpu::BindingResource::TextureView(&click_rule_texture_view),
+                },
+
+                wgpu::BindGroupEntry
+                {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Buffer(click_rule_render_flags_buffer.as_entire_buffer_binding()),
+                }
+            ]
+        });
+
+        let bake_click_rule_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor
+        {
+            label: None,
+            layout: &binding_layouts.bake_click_rule_bind_group_layout,
+            entries:
+            &[
+                wgpu::BindGroupEntry
+                {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&click_rule_texture_view),
+                },
+
+                wgpu::BindGroupEntry
+                {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Buffer(click_rule_buffer.as_entire_buffer_binding())
+                }
+            ]
+        });
+
+        Self
+        {
+            click_rule_render_state_bind_group,
+            bake_click_rule_bind_group,
+
+            click_rule_texture,
+            click_rule_buffer,
+            click_rule_render_flags_buffer
+        }
+    }
+}
+
+impl StafraBoardBindings
+{
+    fn new(device: &wgpu::Device, binding_layouts: &StafraBindingLayouts, click_rule_bindings: &StafraClickRuleBindings, width: u32, height: u32) -> Self
+    {
+        assert!((width  + 1).is_power_of_two());
+        assert!((height + 1).is_power_of_two());
+
+        let board_width  = width;
+        let board_height = height;
 
         let initial_state_texture_descriptor = wgpu::TextureDescriptor
         {
@@ -538,44 +636,12 @@ impl StafraBindings
             usage:           wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::STORAGE_BINDING | wgpu::TextureUsages::COPY_SRC
         };
 
-        let click_rule_buffer_descriptor = wgpu::BufferDescriptor
-        {
-            label:              None,
-            size:               4 * std::mem::size_of::<i32>() as u64 + 32 * 32 * 2 * std::mem::size_of::<i32>() as u64,
-            usage:              wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false
-        };
-
-        let click_rule_render_flags_buffer_descriptor = wgpu::BufferDescriptor
-        {
-            label:              None,
-            size:               std::mem::size_of::<u32>() as u64,
-            usage:              wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false
-        };
-
-        let click_rule_texture = device.create_texture(&click_rule_texture_descriptor);
         let initial_state      = device.create_texture(&initial_state_texture_descriptor);
         let current_board      = device.create_texture(&board_texture_descriptor);
         let next_board         = device.create_texture(&board_texture_descriptor);
         let current_stability  = device.create_texture(&board_texture_descriptor);
         let next_stability     = device.create_texture(&board_texture_descriptor);
         let final_state        = device.create_texture(&final_state_texture_descriptor);
-
-        let click_rule_buffer              = device.create_buffer(&click_rule_buffer_descriptor);
-        let click_rule_render_flags_buffer = device.create_buffer(&click_rule_render_flags_buffer_descriptor);
-
-        let click_rule_texture_view_descriptor = wgpu::TextureViewDescriptor
-        {
-            label:             None,
-            format:            Some(wgpu::TextureFormat::R32Uint),
-            dimension:         Some(wgpu::TextureViewDimension::D2),
-            aspect:            wgpu::TextureAspect::All,
-            base_mip_level:    0,
-            mip_level_count:   None,
-            base_array_layer:  0,
-            array_layer_count: None
-        };
 
         let initial_state_view_descriptor = wgpu::TextureViewDescriptor
         {
@@ -613,7 +679,6 @@ impl StafraBindings
             array_layer_count: None
         };
 
-        let click_rule_texture_view = click_rule_texture.create_view(&click_rule_texture_view_descriptor);
         let initial_state_view      = initial_state.create_view(&initial_state_view_descriptor);
         let current_board_view      = current_board.create_view(&board_view_descriptor);
         let next_board_view         = next_board.create_view(&board_view_descriptor);
@@ -657,26 +722,6 @@ impl StafraBindings
             ]
         });
 
-        let click_rule_render_state_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor
-        {
-            label: None,
-            layout: &binding_layouts.click_rule_render_state_bind_group_layout,
-            entries:
-            &[
-                wgpu::BindGroupEntry
-                {
-                    binding:  0,
-                    resource: wgpu::BindingResource::TextureView(&click_rule_texture_view),
-                },
-
-                wgpu::BindGroupEntry
-                {
-                    binding: 1,
-                    resource: wgpu::BindingResource::Buffer(click_rule_render_flags_buffer.as_entire_buffer_binding()),
-                }
-            ]
-        });
-
         let clear_default_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor
         {
             label: None,
@@ -688,26 +733,6 @@ impl StafraBindings
                     binding: 0,
                     resource: wgpu::BindingResource::TextureView(&current_board_view),
                 },
-            ]
-        });
-
-        let bake_click_rule_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor
-        {
-            label: None,
-            layout: &binding_layouts.bake_click_rule_bind_group_layout,
-            entries:
-            &[
-                wgpu::BindGroupEntry
-                {
-                    binding: 0,
-                    resource: wgpu::BindingResource::TextureView(&click_rule_texture_view),
-                },
-
-                wgpu::BindGroupEntry
-                {
-                    binding: 1,
-                    resource: wgpu::BindingResource::Buffer(click_rule_buffer.as_entire_buffer_binding())
-                }
             ]
         });
 
@@ -764,7 +789,7 @@ impl StafraBindings
                 wgpu::BindGroupEntry
                 {
                     binding: 4,
-                    resource: wgpu::BindingResource::Buffer(click_rule_buffer.as_entire_buffer_binding())
+                    resource: wgpu::BindingResource::Buffer(click_rule_bindings.click_rule_buffer.as_entire_buffer_binding())
                 }
             ]
         });
@@ -802,7 +827,7 @@ impl StafraBindings
                 wgpu::BindGroupEntry
                 {
                     binding: 4,
-                    resource: wgpu::BindingResource::Buffer(click_rule_buffer.as_entire_buffer_binding())
+                    resource: wgpu::BindingResource::Buffer(click_rule_bindings.click_rule_buffer.as_entire_buffer_binding())
                 }
             ]
         });
@@ -905,9 +930,7 @@ impl StafraBindings
             board_height,
 
             main_render_state_bind_group,
-            click_rule_render_state_bind_group,
             clear_default_bind_group,
-            bake_click_rule_bind_group,
             initial_transform_bind_group,
             next_step_bind_group_a,
             next_step_bind_group_b,
@@ -917,15 +940,12 @@ impl StafraBindings
             clear_stability_bind_group_b,
             generate_mip_bind_groups,
 
-            click_rule_texture,
             initial_state,
             current_board,
             next_board,
             current_stability,
             next_stability,
-            final_state,
-            click_rule_buffer,
-            click_rule_render_flags_buffer
+            final_state
         }
     }
 }
@@ -1023,8 +1043,9 @@ impl StafraState
 
         let generate_mip_module = device.create_shader_module(&wgpu::include_wgsl!("../target/shaders/final_state_generate_next_mip.wgsl"));
 
-        let binding_layouts = StafraBindingLayouts::new(&device);
-        let bindings        = StafraBindings::new(&device, &binding_layouts, board_width, board_height);
+        let binding_layouts     = StafraBindingLayouts::new(&device);
+        let click_rule_bindings = StafraClickRuleBindings::new(&device, &binding_layouts);
+        let board_bindings      = StafraBoardBindings::new(&device, &binding_layouts, &click_rule_bindings, board_width, board_height);
 
         let main_render_state_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor
         {
@@ -1277,7 +1298,8 @@ impl StafraState
             click_rule_render_flags: 0,
 
             binding_layouts,
-            bindings
+            click_rule_bindings,
+            board_bindings
         }
     }
 
@@ -1313,8 +1335,8 @@ impl StafraState
             return;
         }
 
-        let real_width  = (self.bindings.board_width  + 1) / 2;
-        let real_height = (self.bindings.board_height + 1) / 2;
+        let real_width  = (self.board_bindings.board_width  + 1) / 2;
+        let real_height = (self.board_bindings.board_height + 1) / 2;
 
         let row_alignment = 256 as usize;
         let row_pitch     = ((real_width as usize * std::mem::size_of::<f32>()) + (row_alignment - 1)) & (!(row_alignment - 1));
@@ -1330,7 +1352,7 @@ impl StafraState
         let mut buffer_copy_encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor{label: None});
         buffer_copy_encoder.copy_texture_to_buffer(wgpu::ImageCopyTexture
         {
-            texture:   &self.bindings.final_state,
+            texture:   &self.board_bindings.final_state,
             mip_level: 0,
             origin:    wgpu::Origin3d
             {
@@ -1392,8 +1414,8 @@ impl StafraState
         {
             std::task::Poll::Ready(_) =>
             {
-                let padded_width  = self.bindings.board_width  + 1;
-                let padded_height = self.bindings.board_height + 1;
+                let padded_width  = self.board_bindings.board_width  + 1;
+                let padded_height = self.board_bindings.board_height + 1;
 
                 let mut image_array = vec![0; (padded_width * padded_height * 4) as usize];
                 {
@@ -1447,7 +1469,7 @@ impl StafraState
 
                 self.save_png_request = None;
 
-                Ok((image_array, self.bindings.board_width, self.bindings.board_height, padded_width))
+                Ok((image_array, self.board_bindings.board_width, self.board_bindings.board_height, padded_width))
             }
 
             std::task::Poll::Pending => Err("Pending".to_string())
@@ -1467,7 +1489,7 @@ impl StafraState
         }
 
         let buffer_data = self.click_rule_render_flags.to_le_bytes();
-        self.queue.write_buffer(&self.bindings.click_rule_render_flags_buffer, 0, &buffer_data);
+        self.queue.write_buffer(&self.click_rule_bindings.click_rule_render_flags_buffer, 0, &buffer_data);
     }
 
     pub fn set_click_rule_read_only(&mut self, is_read_only: bool)
@@ -1483,7 +1505,7 @@ impl StafraState
         }
 
         let buffer_data = self.click_rule_render_flags.to_le_bytes();
-        self.queue.write_buffer(&self.bindings.click_rule_render_flags_buffer, 0, &buffer_data);
+        self.queue.write_buffer(&self.click_rule_bindings.click_rule_render_flags_buffer, 0, &buffer_data);
     }
 
     pub fn reset_board_unchanged(&mut self)
@@ -1512,11 +1534,11 @@ impl StafraState
     {
         //Crop to the largest possible square with sides of 2^n - 1
         let cropped_size = (min(width, height) + 2).next_power_of_two() / 2 - 1;
-        self.bindings = StafraBindings::new(&self.device, &self.binding_layouts, cropped_size, cropped_size);
+        self.board_bindings = StafraBoardBindings::new(&self.device, &self.binding_layouts, &self.click_rule_bindings, cropped_size, cropped_size);
 
         self.queue.write_texture(wgpu::ImageCopyTexture
         {
-            texture:   &self.bindings.initial_state,
+            texture:   &self.board_bindings.initial_state,
             mip_level: 0,
             origin:    wgpu::Origin3d::ZERO,
             aspect:    wgpu::TextureAspect::All
@@ -1539,6 +1561,14 @@ impl StafraState
         self.last_reset_type = ResetBoardType::Custom;
     }
 
+    pub fn resize_board(&mut self, new_width: u32, new_height: u32)
+    {
+        let cropped_size = (min(new_width, new_height) + 2).next_power_of_two() / 2 - 1;
+        self.board_bindings = StafraBoardBindings::new(&self.device, &self.binding_layouts, &self.click_rule_bindings, cropped_size, cropped_size);
+
+        self.reset_board_unchanged();
+    }
+
     pub fn reset_click_rule(&mut self, click_rule_data: &[u32; 32 * 32])
     {
         let click_rule_size = 32;
@@ -1557,7 +1587,7 @@ impl StafraState
 
         self.queue.write_texture(wgpu::ImageCopyTexture
         {
-            texture:   &self.bindings.click_rule_texture,
+            texture:   &self.click_rule_bindings.click_rule_texture,
             mip_level: 0,
             origin:    wgpu::Origin3d::ZERO,
             aspect:    wgpu::TextureAspect::All
@@ -1589,8 +1619,8 @@ impl StafraState
         self.calc_next_frame(&mut encoder);
         self.generate_final_image(&mut encoder);
 
-        std::mem::swap(&mut self.bindings.next_step_bind_group_a,       &mut self.bindings.next_step_bind_group_b);
-        std::mem::swap(&mut self.bindings.final_transform_bind_group_a, &mut self.bindings.final_transform_bind_group_b);
+        std::mem::swap(&mut self.board_bindings.next_step_bind_group_a,       &mut self.board_bindings.next_step_bind_group_b);
+        std::mem::swap(&mut self.board_bindings.final_transform_bind_group_a, &mut self.board_bindings.final_transform_bind_group_b);
         self.frame_number += 1;
 
         self.queue.submit(std::iter::once(encoder.finish()));
@@ -1627,7 +1657,7 @@ impl StafraState
             });
 
             main_render_pass.set_pipeline(&self.main_render_state_pipeline);
-            main_render_pass.set_bind_group(0, &self.bindings.main_render_state_bind_group, &[]);
+            main_render_pass.set_bind_group(0, &self.board_bindings.main_render_state_bind_group, &[]);
             main_render_pass.draw(0..3, 0..1);
         }
 
@@ -1653,7 +1683,7 @@ impl StafraState
             });
 
             click_rule_render_pass.set_pipeline(&self.click_rule_render_state_pipeline);
-            click_rule_render_pass.set_bind_group(0, &self.bindings.click_rule_render_state_bind_group, &[]);
+            click_rule_render_pass.set_bind_group(0, &self.click_rule_bindings.click_rule_render_state_bind_group, &[]);
             click_rule_render_pass.draw(0..3, 0..1);
         }
 
@@ -1667,34 +1697,34 @@ impl StafraState
 
     fn calc_next_frame(&self, encoder: &mut wgpu::CommandEncoder)
     {
-        let thread_groups_x = std::cmp::max((self.bindings.board_width + 1) / (2 * 8), 1u32);
-        let thread_groups_y = std::cmp::max((self.bindings.board_height + 1) / (2 * 8), 1u32);
+        let thread_groups_x = std::cmp::max((self.board_bindings.board_width + 1) / (2 * 8), 1u32);
+        let thread_groups_y = std::cmp::max((self.board_bindings.board_height + 1) / (2 * 8), 1u32);
 
         {
             let mut next_step_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {label: None});
 
             next_step_pass.set_pipeline(&self.next_step_pipeline);
-            next_step_pass.set_bind_group(0, &self.bindings.next_step_bind_group_a, &[]);
+            next_step_pass.set_bind_group(0, &self.board_bindings.next_step_bind_group_a, &[]);
             next_step_pass.dispatch(thread_groups_x, thread_groups_y, 1);
         }
     }
 
     fn generate_final_image(&self, encoder: &mut wgpu::CommandEncoder)
     {
-        let thread_groups_x = std::cmp::max((self.bindings.board_width  + 1) / (2 * 16), 1u32);
-        let thread_groups_y = std::cmp::max((self.bindings.board_height + 1) / (2 * 16), 1u32);
+        let thread_groups_x = std::cmp::max((self.board_bindings.board_width  + 1) / (2 * 16), 1u32);
+        let thread_groups_y = std::cmp::max((self.board_bindings.board_height + 1) / (2 * 16), 1u32);
 
         {
             let mut final_transform_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {label: None});
 
             final_transform_pass.set_pipeline(&self.final_state_transform_pipeline);
-            final_transform_pass.set_bind_group(0, &self.bindings.final_transform_bind_group_a, &[]);
+            final_transform_pass.set_bind_group(0, &self.board_bindings.final_transform_bind_group_a, &[]);
             final_transform_pass.dispatch(thread_groups_x, thread_groups_y, 1);
         }
 
         let mut thread_groups_mip_x = std::cmp::max(thread_groups_x / 2, 1u32);
         let mut thread_groups_mip_y = std::cmp::max(thread_groups_y / 2, 1u32);
-        for gen_mip_bind_group in &self.bindings.generate_mip_bind_groups
+        for gen_mip_bind_group in &self.board_bindings.generate_mip_bind_groups
         {
             let mut generate_mip_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {label: None});
 
@@ -1709,16 +1739,16 @@ impl StafraState
 
     fn reset_board_standard_impl(&mut self, reset_type: StandardResetBoardType)
     {
-        let thread_groups_x = std::cmp::max((self.bindings.board_width  + 1) / (2 * 16), 1u32);
-        let thread_groups_y = std::cmp::max((self.bindings.board_height + 1) / (2 * 16), 1u32);
+        let thread_groups_x = std::cmp::max((self.board_bindings.board_width  + 1) / (2 * 16), 1u32);
+        let thread_groups_y = std::cmp::max((self.board_bindings.board_height + 1) / (2 * 16), 1u32);
 
         let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor{label: None});
 
         if self.frame_number % 2 == 1
         {
             //Make sure we're clearing the right one
-            std::mem::swap(&mut self.bindings.next_step_bind_group_a,       &mut self.bindings.next_step_bind_group_b);
-            std::mem::swap(&mut self.bindings.final_transform_bind_group_a, &mut self.bindings.final_transform_bind_group_b);
+            std::mem::swap(&mut self.board_bindings.next_step_bind_group_a,       &mut self.board_bindings.next_step_bind_group_b);
+            std::mem::swap(&mut self.board_bindings.final_transform_bind_group_a, &mut self.board_bindings.final_transform_bind_group_b);
         }
 
         self.frame_number = 0;
@@ -1730,19 +1760,19 @@ impl StafraState
                 StandardResetBoardType::Corners =>
                 {
                     reset_pass.set_pipeline(&self.clear_4_corners_pipeline);
-                    reset_pass.set_bind_group(0, &self.bindings.clear_default_bind_group, &[]);
+                    reset_pass.set_bind_group(0, &self.board_bindings.clear_default_bind_group, &[]);
                 },
 
                 StandardResetBoardType::Edges =>
                 {
                     reset_pass.set_pipeline(&self.clear_4_sides_pipeline);
-                    reset_pass.set_bind_group(0, &self.bindings.clear_default_bind_group, &[]);
+                    reset_pass.set_bind_group(0, &self.board_bindings.clear_default_bind_group, &[]);
                 },
 
                 StandardResetBoardType::Center =>
                 {
                     reset_pass.set_pipeline(&self.clear_center_pipeline);
-                    reset_pass.set_bind_group(0, &self.bindings.clear_default_bind_group, &[]);
+                    reset_pass.set_bind_group(0, &self.board_bindings.clear_default_bind_group, &[]);
                 }
             }
 
@@ -1757,16 +1787,16 @@ impl StafraState
 
     fn reset_board_custom_impl(&mut self)
     {
-        let thread_groups_x = std::cmp::max((self.bindings.board_width  + 1) / (2 * 16), 1u32);
-        let thread_groups_y = std::cmp::max((self.bindings.board_height + 1) / (2 * 16), 1u32);
+        let thread_groups_x = std::cmp::max((self.board_bindings.board_width  + 1) / (2 * 16), 1u32);
+        let thread_groups_y = std::cmp::max((self.board_bindings.board_height + 1) / (2 * 16), 1u32);
 
         let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor{label: None});
 
         if self.frame_number % 2 == 1
         {
             //Make sure we're clearing the right one
-            std::mem::swap(&mut self.bindings.next_step_bind_group_a,       &mut self.bindings.next_step_bind_group_b);
-            std::mem::swap(&mut self.bindings.final_transform_bind_group_a, &mut self.bindings.final_transform_bind_group_b);
+            std::mem::swap(&mut self.board_bindings.next_step_bind_group_a,       &mut self.board_bindings.next_step_bind_group_b);
+            std::mem::swap(&mut self.board_bindings.final_transform_bind_group_a, &mut self.board_bindings.final_transform_bind_group_b);
         }
 
         self.frame_number = 0;
@@ -1775,7 +1805,7 @@ impl StafraState
             let mut initial_transform_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {label: None});
 
             initial_transform_pass.set_pipeline(&self.initial_state_transform_pipeline);
-            initial_transform_pass.set_bind_group(0, &self.bindings.initial_transform_bind_group, &[]);
+            initial_transform_pass.set_bind_group(0, &self.board_bindings.initial_transform_bind_group, &[]);
 
             initial_transform_pass.dispatch(thread_groups_x, thread_groups_y, 1);
         }
@@ -1788,14 +1818,14 @@ impl StafraState
 
     fn clear_stability(&self, encoder: &mut wgpu::CommandEncoder)
     {
-        let thread_groups_x = std::cmp::max((self.bindings.board_width  + 1) / (2 * 16), 1u32);
-        let thread_groups_y = std::cmp::max((self.bindings.board_height + 1) / (2 * 16), 1u32);
+        let thread_groups_x = std::cmp::max((self.board_bindings.board_width  + 1) / (2 * 16), 1u32);
+        let thread_groups_y = std::cmp::max((self.board_bindings.board_height + 1) / (2 * 16), 1u32);
 
         {
             let mut clear_stability_pass_a = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {label: None});
 
             clear_stability_pass_a.set_pipeline(&self.clear_stability_pipeline);
-            clear_stability_pass_a.set_bind_group(0, &self.bindings.clear_stability_bind_group_a, &[]);
+            clear_stability_pass_a.set_bind_group(0, &self.board_bindings.clear_stability_bind_group_a, &[]);
             clear_stability_pass_a.dispatch(thread_groups_x, thread_groups_y, 1);
         }
 
@@ -1803,28 +1833,28 @@ impl StafraState
             let mut clear_stability_pass_b = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {label: None});
 
             clear_stability_pass_b.set_pipeline(&self.clear_stability_pipeline);
-            clear_stability_pass_b.set_bind_group(0, &self.bindings.clear_stability_bind_group_b, &[]);
+            clear_stability_pass_b.set_bind_group(0, &self.board_bindings.clear_stability_bind_group_b, &[]);
             clear_stability_pass_b.dispatch(thread_groups_x, thread_groups_y, 1);
         }
     }
 
     fn bake_click_rule(&self, encoder: &mut wgpu::CommandEncoder)
     {
-        let click_rule_texture_size = 32;
-        let workgroup_size          = 8;
+        let click_rule_size = 32;
+        let workgroup_size  = 8;
 
-        let thread_group_size = click_rule_texture_size / workgroup_size;
+        let thread_group_size = (click_rule_size / workgroup_size) as u32;
 
-        let click_rule_buffer_size = 4 * std::mem::size_of::<u32>() + 32 * 32 * 2 * std::mem::size_of::<i32>();
+        let click_rule_buffer_size = 4 * std::mem::size_of::<u32>() + click_rule_size * click_rule_size * 2 * std::mem::size_of::<i32>();
         let click_rule_buffer_data = vec![0u8; click_rule_buffer_size];
 
-        self.queue.write_buffer(&self.bindings.click_rule_buffer, 0, click_rule_buffer_data.as_slice());
+        self.queue.write_buffer(&self.click_rule_bindings.click_rule_buffer, 0, click_rule_buffer_data.as_slice());
 
         {
             let mut bake_click_rule_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {label: None});
 
             bake_click_rule_pass.set_pipeline(&self.bake_click_rule_pipeline);
-            bake_click_rule_pass.set_bind_group(0, &self.bindings.bake_click_rule_bind_group, &[]);
+            bake_click_rule_pass.set_bind_group(0, &self.click_rule_bindings.bake_click_rule_bind_group, &[]);
             bake_click_rule_pass.dispatch(thread_group_size, thread_group_size, 1);
         }
     }

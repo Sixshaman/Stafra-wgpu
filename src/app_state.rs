@@ -34,4 +34,9 @@ impl AppState
             click_rule_data
         }
     }
+
+    pub fn board_size_from_index(index: u32) -> u32
+    {
+        (1 << (index + 1)) - 1
+    }
 }

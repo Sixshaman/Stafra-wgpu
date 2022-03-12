@@ -29,10 +29,10 @@ pub async fn run_event_loop()
 
     let show_grid_checkbox = document.get_element_by_id("grid_checkbox").unwrap().dyn_into::<web_sys::HtmlInputElement>().unwrap();
 
-    let initial_state_select       = document.get_element_by_id("initial_states").unwrap().dyn_into::<web_sys::HtmlSelectElement>().unwrap();
     let initial_state_upload_input = document.get_element_by_id("board_input").unwrap().dyn_into::<web_sys::HtmlInputElement>().unwrap();
 
-    let size_select = document.get_element_by_id("sizes").unwrap().dyn_into::<web_sys::HtmlSelectElement>().unwrap();
+    let initial_state_select = document.get_element_by_id("initial_states").unwrap().dyn_into::<web_sys::HtmlSelectElement>().unwrap();
+    let size_select          = document.get_element_by_id("sizes").unwrap().dyn_into::<web_sys::HtmlSelectElement>().unwrap();
 
 
     //Apparently it's necessary to do it, width and height are not set up automatically
@@ -43,8 +43,10 @@ pub async fn run_event_loop()
 
 
     //Initializing the state
-    let initial_width  = 1023;
-    let initial_height = 1023;
+    let board_size_selected_index = size_select.selected_index() as u32;
+
+    let initial_width  = app_state::AppState::board_size_from_index(board_size_selected_index);
+    let initial_height = app_state::AppState::board_size_from_index(board_size_selected_index);
 
     let app_state_rc    = Rc::new(RefCell::new(app_state::AppState::new()));
     let stafra_state_rc = Rc::new(RefCell::new(stafra_state::StafraState::new_web(&main_canvas, &click_rule_canvas, initial_width, initial_height).await));
@@ -74,6 +76,7 @@ pub async fn run_event_loop()
     let initial_state_upload_input_closure = create_board_upload_input_closure(app_state_rc.clone(), stafra_state_rc.clone());
 
     let select_initial_state_closure = create_select_initial_state_closure(app_state_rc.clone(), stafra_state_rc.clone());
+    let select_size_closure          = create_select_size_closure(stafra_state_rc.clone());
 
 
     //Setting closures
@@ -90,6 +93,7 @@ pub async fn run_event_loop()
     initial_state_upload_input.set_onchange(Some(initial_state_upload_input_closure.as_ref().unchecked_ref()));
 
     initial_state_select.set_onchange(Some(select_initial_state_closure.as_ref().unchecked_ref()));
+    size_select.set_onchange(Some(select_size_closure.as_ref().unchecked_ref()));
 
 
     //Refresh handler
@@ -195,6 +199,7 @@ pub async fn run_event_loop()
     show_grid_closure.forget();
     initial_state_upload_input_closure.forget();
     select_initial_state_closure.forget();
+    select_size_closure.forget();
 }
 
 fn create_click_rule_change_closure(app_state_rc: Rc<RefCell<app_state::AppState>>, stafra_state_rc: Rc<RefCell<stafra_state::StafraState>>) -> Closure<dyn Fn(web_sys::Event)>
@@ -410,6 +415,22 @@ fn create_select_initial_state_closure(app_state_rc: Rc<RefCell<app_state::AppSt
         }
 
         update_ui(&app_state.run_state);
+    }) as Box<dyn Fn(web_sys::Event)>)
+}
+
+fn create_select_size_closure(stafra_state_rc: Rc<RefCell<stafra_state::StafraState>>) -> Closure<dyn Fn(web_sys::Event)>
+{
+    Closure::wrap(Box::new(move |event: web_sys::Event|
+    {
+        let mut stafra_state = stafra_state_rc.borrow_mut();
+
+        let size_select = event.target().unwrap().dyn_into::<web_sys::HtmlSelectElement>().unwrap();
+        let board_size_selected_index = size_select.selected_index() as u32;
+
+        let new_width  = app_state::AppState::board_size_from_index(board_size_selected_index);
+        let new_height = app_state::AppState::board_size_from_index(board_size_selected_index);
+
+        stafra_state.resize_board(new_width, new_height);
     }) as Box<dyn Fn(web_sys::Event)>)
 }
 
