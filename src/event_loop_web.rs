@@ -73,9 +73,9 @@ pub async fn run_event_loop()
 
     let show_grid_closure = create_show_grid_closure(stafra_state_rc.clone());
 
-    let initial_state_upload_input_closure = create_board_upload_input_closure(app_state_rc.clone(), stafra_state_rc.clone());
+    let initial_state_upload_input_closure = create_board_upload_input_closure(stafra_state_rc.clone());
 
-    let select_initial_state_closure = create_select_initial_state_closure(app_state_rc.clone(), stafra_state_rc.clone());
+    let select_initial_state_closure = create_select_initial_state_closure(stafra_state_rc.clone());
     let select_size_closure          = create_select_size_closure(stafra_state_rc.clone());
 
 
@@ -306,11 +306,10 @@ fn create_show_grid_closure(stafra_state_rc: Rc<RefCell<stafra_state::StafraStat
     }) as Box<dyn Fn(web_sys::Event)>)
 }
 
-fn create_board_upload_input_closure(app_state_rc: Rc<RefCell<app_state::AppState>>, stafra_state_rc: Rc<RefCell<stafra_state::StafraState>>) -> Closure<dyn Fn(web_sys::Event)>
+fn create_board_upload_input_closure(stafra_state_rc: Rc<RefCell<stafra_state::StafraState>>) -> Closure<dyn Fn(web_sys::Event)>
 {
     let board_upload_image_closure = Closure::wrap(Box::new(move |event: web_sys::Event|
     {
-        let mut app_state    = app_state_rc.borrow_mut();
         let mut stafra_state = stafra_state_rc.borrow_mut();
 
         let board_image = event.target().unwrap().dyn_into::<web_sys::HtmlImageElement>().unwrap();
@@ -326,10 +325,8 @@ fn create_board_upload_input_closure(app_state_rc: Rc<RefCell<app_state::AppStat
         let image_data = canvas_context.get_image_data(0.0, 0.0, board_image.width() as f64, board_image.height() as f64).unwrap();
 
         stafra_state.reset_board_custom(image_data.data().to_vec(), image_data.width(), image_data.height());
-        app_state.run_state = RunState::Running;
 
         canvas_board.remove();
-        update_ui(&app_state.run_state);
     }) as Box<dyn Fn(web_sys::Event)>);
 
     let board_upload_image_element = web_sys::HtmlImageElement::new().unwrap();
@@ -376,11 +373,10 @@ fn create_board_upload_input_closure(app_state_rc: Rc<RefCell<app_state::AppStat
     }) as Box<dyn Fn(web_sys::Event)>)
 }
 
-fn create_select_initial_state_closure(app_state_rc: Rc<RefCell<app_state::AppState>>, stafra_state_rc: Rc<RefCell<stafra_state::StafraState>>) -> Closure<dyn Fn(web_sys::Event)>
+fn create_select_initial_state_closure(stafra_state_rc: Rc<RefCell<stafra_state::StafraState>>) -> Closure<dyn Fn(web_sys::Event)>
 {
     Closure::wrap(Box::new(move |event: web_sys::Event|
     {
-        let mut app_state    = app_state_rc.borrow_mut();
         let mut stafra_state = stafra_state_rc.borrow_mut();
 
         let board_reset_select = event.target().unwrap().dyn_into::<web_sys::HtmlSelectElement>().unwrap();
@@ -389,19 +385,16 @@ fn create_select_initial_state_closure(app_state_rc: Rc<RefCell<app_state::AppSt
             "initial_state_corners" =>
             {
                 stafra_state.reset_board_standard(stafra_state::StandardResetBoardType::Corners);
-                app_state.run_state = RunState::Running;
             },
 
             "initial_state_sides" =>
             {
                 stafra_state.reset_board_standard(stafra_state::StandardResetBoardType::Edges);
-                app_state.run_state = RunState::Running;
             },
 
             "initial_state_center" =>
             {
                 stafra_state.reset_board_standard(stafra_state::StandardResetBoardType::Center);
-                app_state.run_state = RunState::Running;
             },
 
             "initial_state_custom" =>
@@ -414,7 +407,6 @@ fn create_select_initial_state_closure(app_state_rc: Rc<RefCell<app_state::AppSt
             _ => {}
         }
 
-        update_ui(&app_state.run_state);
     }) as Box<dyn Fn(web_sys::Event)>)
 }
 
