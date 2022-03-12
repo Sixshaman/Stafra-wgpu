@@ -4,7 +4,8 @@ struct FsInput
     @location(0)       texcoord:      vec2<f32>;
 };
 
-let FlagDrawOverlay: u32 = 0x01u;
+let FlagDrawOverlay:     u32 = 0x01u;
+let FlagChangesDisabled: u32 = 0x02u;
 
 struct ClickRuleFlags
 {
@@ -21,17 +22,23 @@ fn main(fin: FsInput) -> @location(0) vec4<f32>
     let click_rule_coordinates = vec2<i32>(fin.texcoord * click_rule_size);
 
     let click_rule_val: u32 = textureLoad(click_rule, click_rule_coordinates, 0).x;
-    let click_rule_color_rgb = f32(click_rule_val) * vec3<f32>(0.0, 1.0, 0.0);
 
-    let click_rule_color = vec4<f32>(click_rule_color_rgb, 1.0);
+    var result_color = vec4<f32>(0.0, 0.0, 0.0, 1.0);
+    if((click_rule_flags.flags & FlagChangesDisabled) == 0u)
+    {
+        result_color = result_color + f32(click_rule_val) * vec4<f32>(vec3<f32>(0.0, 1.0, 0.0), 0.0);
+    }
+    else
+    {
+        result_color = result_color + f32(click_rule_val) * vec4<f32>(vec3<f32>(0.5, 0.5, 0.5), 0.0);
+    }
 
-    var overlay_color = vec4<f32>(0.0, 0.0, 0.0, 1.0);
     if((click_rule_flags.flags & FlagDrawOverlay) != 0u)
     {
         let truncated_size = click_rule_size - vec2<f32>(1.0, 1.0); //We don't use bottom and right texels
 
         let texcoord_corrected: vec2<f32> = fin.texcoord * click_rule_size / truncated_size;
-        let cell_size = vec2<f32>(1.0, 1.0) / click_rule_size;
+        let cell_size = vec2<f32>(1.0, 1.0) / truncated_size;
 
         let middle_vertical_line_distance:           f32 = abs(texcoord_corrected.x - 0.5);
         let middle_horizontal_line_distance:         f32 = abs(texcoord_corrected.y - 0.5);
@@ -40,8 +47,8 @@ fn main(fin: FsInput) -> @location(0) vec4<f32>
 
         let left_vertical_line_distance:     f32 = abs(texcoord_corrected.x -                     0.5  * cell_size.x);
         let right_vertical_line_distance:    f32 = abs(texcoord_corrected.x - (truncated_size.x - 0.5) * cell_size.x);
-        let top_horizontal_line_distance:    f32 = abs(texcoord_corrected.x -                     0.5  * cell_size.x);
-        let bottom_horizontal_line_distance: f32 = abs(texcoord_corrected.x - (truncated_size.x - 0.5) * cell_size.x);
+        let top_horizontal_line_distance:    f32 = abs(texcoord_corrected.y -                     0.5  * cell_size.y);
+        let bottom_horizontal_line_distance: f32 = abs(texcoord_corrected.y - (truncated_size.y - 0.5) * cell_size.y);
 
         let edge_vertical_line_distance   = min(left_vertical_line_distance, right_vertical_line_distance);
         let edge_horizontal_line_distance = min(top_horizontal_line_distance, bottom_horizontal_line_distance);
@@ -52,10 +59,10 @@ fn main(fin: FsInput) -> @location(0) vec4<f32>
         let line_distance                 = min(straight_line_distance, diagonal_line_distance);
 
         let line_width  = 0.005;
-        let line_factor = smoothStep(line_width - line_distance, 0.0, line_width);
+        let line_factor = 1.0 - smoothStep(line_width - line_distance, 0.0, line_width);
 
-        overlay_color = overlay_color + vec4<f32>(line_factor, line_factor, line_factor, 0.0);
+        result_color = result_color + 0.25 * vec4<f32>(line_factor, line_factor, line_factor, 0.0);
     }
 
-	return click_rule_color;
+	return result_color;
 }

@@ -61,21 +61,23 @@ struct StafraBindings
     generate_mip_bind_groups:           Vec<wgpu::BindGroup>,
 
     #[allow(dead_code)]
-    click_rule_texture: wgpu::Texture,
+    click_rule_texture:             wgpu::Texture,
     #[allow(dead_code)]
-    initial_state:      wgpu::Texture,
+    initial_state:                  wgpu::Texture,
     #[allow(dead_code)]
-    current_board:      wgpu::Texture,
+    current_board:                  wgpu::Texture,
     #[allow(dead_code)]
-    next_board:         wgpu::Texture,
+    next_board:                     wgpu::Texture,
     #[allow(dead_code)]
-    current_stability:  wgpu::Texture,
+    current_stability:              wgpu::Texture,
     #[allow(dead_code)]
-    next_stability:     wgpu::Texture,
+    next_stability:                 wgpu::Texture,
     #[allow(dead_code)]
-    final_state:        wgpu::Texture,
+    final_state:                    wgpu::Texture,
     #[allow(dead_code)]
-    click_rule_buffer:  wgpu::Buffer,
+    click_rule_buffer:              wgpu::Buffer,
+    #[allow(dead_code)]
+    click_rule_render_flags_buffer: wgpu::Buffer,
 }
 
 #[derive(Copy, Clone, PartialEq)]
@@ -117,6 +119,8 @@ pub struct StafraState
 
     save_png_request: Option<SavePngRequest>,
     last_reset_type:  ResetBoardType,
+
+    click_rule_render_flags: u32,
 
     binding_layouts: StafraBindingLayouts,
     bindings:        StafraBindings,
@@ -546,7 +550,7 @@ impl StafraBindings
         {
             label:              None,
             size:               std::mem::size_of::<u32>() as u64,
-            usage:              wgpu::BufferUsages::UNIFORM,
+            usage:              wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false
         };
 
@@ -920,7 +924,8 @@ impl StafraBindings
             current_stability,
             next_stability,
             final_state,
-            click_rule_buffer
+            click_rule_buffer,
+            click_rule_render_flags_buffer
         }
     }
 }
@@ -1269,6 +1274,8 @@ impl StafraState
             save_png_request: None,
             last_reset_type:  ResetBoardType::Standard{reset_type: StandardResetBoardType::Corners},
 
+            click_rule_render_flags: 0,
+
             binding_layouts,
             bindings
         }
@@ -1447,6 +1454,38 @@ impl StafraState
         }
     }
 
+    pub fn set_click_rule_grid_enabled(&mut self, enable: bool)
+    {
+        let render_grid_flag = 0x01;
+        if enable
+        {
+            self.click_rule_render_flags |= render_grid_flag;
+        }
+        else
+        {
+            self.click_rule_render_flags &= !render_grid_flag;
+        }
+
+        let buffer_data = self.click_rule_render_flags.to_le_bytes();
+        self.queue.write_buffer(&self.bindings.click_rule_render_flags_buffer, 0, &buffer_data);
+    }
+
+    pub fn set_click_rule_read_only(&mut self, is_read_only: bool)
+    {
+        let click_rule_read_only_flag = 0x02;
+        if is_read_only
+        {
+            self.click_rule_render_flags |= click_rule_read_only_flag;
+        }
+        else
+        {
+            self.click_rule_render_flags &= !click_rule_read_only_flag;
+        }
+
+        let buffer_data = self.click_rule_render_flags.to_le_bytes();
+        self.queue.write_buffer(&self.bindings.click_rule_render_flags_buffer, 0, &buffer_data);
+    }
+
     pub fn reset_board_unchanged(&mut self)
     {
         match self.last_reset_type
@@ -1500,29 +1539,21 @@ impl StafraState
         self.last_reset_type = ResetBoardType::Custom;
     }
 
-    pub fn reset_click_rule(&mut self)
+    pub fn reset_click_rule(&mut self, click_rule_data: &[u32; 32 * 32])
     {
         let click_rule_size = 32;
-        let mut click_rule_byte_data = vec![0u8; click_rule_size * click_rule_size * std::mem::size_of::<u32>()];
 
-        let center_cell_xy = (click_rule_size - 1) / 2;
-        let left_cell_x    = center_cell_xy - 1;
-        let right_cell_x   = center_cell_xy + 1;
-        let top_cell_y     = center_cell_xy - 1;
-        let bottom_cell_y  = center_cell_xy + 1;
+        let mut click_rule_byte_data = vec![0u8; click_rule_data.len() * std::mem::size_of::<u32>()];
+        for (index, click_rule_cell) in click_rule_data.into_iter().enumerate()
+        {
+            let click_rule_byte_data_index = index * std::mem::size_of::<u32>();
 
-        let center_cell_byte_start_index = (center_cell_xy * click_rule_size + center_cell_xy) * 4;
-        let left_cell_byte_start_index   = (center_cell_xy * click_rule_size + left_cell_x)    * 4;
-        let right_cell_byte_start_index  = (center_cell_xy * click_rule_size + right_cell_x)   * 4;
-        let top_cell_byte_start_index    = (top_cell_y     * click_rule_size + center_cell_xy) * 4;
-        let bottom_cell_byte_start_index = (bottom_cell_y  * click_rule_size + center_cell_xy) * 4;
-
-        //Set the LSB of each u32 to 1
-        click_rule_byte_data[center_cell_byte_start_index] = 1;
-        click_rule_byte_data[left_cell_byte_start_index]   = 1;
-        click_rule_byte_data[right_cell_byte_start_index]  = 1;
-        click_rule_byte_data[top_cell_byte_start_index]    = 1;
-        click_rule_byte_data[bottom_cell_byte_start_index] = 1;
+            let click_rule_cell_bytes = click_rule_cell.to_le_bytes();
+            for (byte_index, byte_value) in click_rule_cell_bytes.into_iter().enumerate()
+            {
+                click_rule_byte_data[click_rule_byte_data_index + byte_index] = byte_value;
+            }
+        }
 
         self.queue.write_texture(wgpu::ImageCopyTexture
         {
@@ -1540,8 +1571,8 @@ impl StafraState
         },
         wgpu::Extent3d
         {
-            width:                 click_rule_size as u32,
-            height:                click_rule_size as u32,
+            width:                 click_rule_size,
+            height:                click_rule_size,
             depth_or_array_layers: 1
         });
 
