@@ -9,6 +9,7 @@ pub enum RunState
 pub struct AppState
 {
     pub run_state:       RunState,
+    pub last_frame:      u32,
     pub click_rule_data: [u32; 32 * 32]
 }
 
@@ -30,7 +31,8 @@ impl AppState
 
         Self
         {
-            run_state: RunState::Stopped,
+            run_state:  RunState::Stopped,
+            last_frame: u32::MAX,
             click_rule_data
         }
     }

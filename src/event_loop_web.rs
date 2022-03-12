@@ -27,6 +27,9 @@ pub async fn run_event_loop()
     let stop_button       = document.get_element_by_id("button_stop").unwrap().dyn_into::<web_sys::HtmlButtonElement>().unwrap();
     let next_frame_button = document.get_element_by_id("button_next_frame").unwrap().dyn_into::<web_sys::HtmlButtonElement>().unwrap();
 
+    let last_frame_checkbox = document.get_element_by_id("last_frame_checkbox").unwrap().dyn_into::<web_sys::HtmlInputElement>().unwrap();
+    let last_frame_input    = document.get_element_by_id("last_frame_number").unwrap().dyn_into::<web_sys::HtmlInputElement>().unwrap();
+
     let show_grid_checkbox = document.get_element_by_id("grid_checkbox").unwrap().dyn_into::<web_sys::HtmlInputElement>().unwrap();
 
     let initial_state_upload_input = document.get_element_by_id("board_input").unwrap().dyn_into::<web_sys::HtmlInputElement>().unwrap();
@@ -51,10 +54,13 @@ pub async fn run_event_loop()
     let app_state_rc    = Rc::new(RefCell::new(app_state::AppState::new()));
     let stafra_state_rc = Rc::new(RefCell::new(stafra_state::StafraState::new_web(&main_canvas, &click_rule_canvas, initial_width, initial_height).await));
 
-    let mut app_state   = app_state_rc.borrow_mut();
+    let mut app_state    = app_state_rc.borrow_mut();
     let mut stafra_state = stafra_state_rc.borrow_mut();
 
     app_state.run_state = RunState::Running;
+
+    update_ui(&app_state.run_state);
+    update_last_frame_with_size(std::cmp::min(initial_width, initial_height), &mut app_state);
 
     stafra_state.reset_board_standard(stafra_state::StandardResetBoardType::Corners);
     stafra_state.reset_click_rule(&app_state.click_rule_data);
@@ -71,12 +77,15 @@ pub async fn run_event_loop()
     let stop_closure       = create_stop_closure(app_state_rc.clone(), stafra_state_rc.clone());
     let next_frame_closure = create_next_frame_closure(app_state_rc.clone(), stafra_state_rc.clone());
 
+    let enable_last_frame_closure = create_enable_last_frame_closure(app_state_rc.clone());
+    let change_last_frame_closure = create_change_last_frame_closure(app_state_rc.clone());
+
     let show_grid_closure = create_show_grid_closure(stafra_state_rc.clone());
 
-    let initial_state_upload_input_closure = create_board_upload_input_closure(stafra_state_rc.clone());
+    let initial_state_upload_input_closure = create_board_upload_input_closure(app_state_rc.clone(), stafra_state_rc.clone());
 
     let select_initial_state_closure = create_select_initial_state_closure(stafra_state_rc.clone());
-    let select_size_closure          = create_select_size_closure(stafra_state_rc.clone());
+    let select_size_closure          = create_select_size_closure(app_state_rc.clone(), stafra_state_rc.clone());
 
 
     //Setting closures
@@ -87,6 +96,9 @@ pub async fn run_event_loop()
     play_pause_button.set_onclick(Some(play_pause_closure.as_ref().unchecked_ref()));
     stop_button.set_onclick(Some(stop_closure.as_ref().unchecked_ref()));
     next_frame_button.set_onclick(Some(next_frame_closure.as_ref().unchecked_ref()));
+
+    last_frame_checkbox.set_onclick(Some(enable_last_frame_closure.as_ref().unchecked_ref()));
+    last_frame_input.set_oninput(Some(change_last_frame_closure.as_ref().unchecked_ref()));
 
     show_grid_checkbox.set_onclick(Some(show_grid_closure.as_ref().unchecked_ref()));
 
@@ -110,7 +122,7 @@ pub async fn run_event_loop()
     let refresh_function_copy = refresh_function.clone();
     *refresh_function_copy.borrow_mut() = Some(Closure::wrap(Box::new(move ||
     {
-        let app_state = app_state_clone_for_refresh.borrow();
+        let mut app_state    = app_state_clone_for_refresh.borrow_mut();
         let mut stafra_state = stafra_state_clone_for_refresh.borrow_mut();
 
         let window = web_sys::window().unwrap();
@@ -119,6 +131,12 @@ pub async fn run_event_loop()
         if app_state.run_state == RunState::Running
         {
             stafra_state.update();
+        }
+
+        if app_state.last_frame == stafra_state.frame_number()
+        {
+            app_state.run_state = RunState::Paused;
+            update_ui(&app_state.run_state);
         }
 
         //Poll PNG save request
@@ -196,6 +214,8 @@ pub async fn run_event_loop()
     play_pause_closure.forget();
     stop_closure.forget();
     next_frame_closure.forget();
+    enable_last_frame_closure.forget();
+    change_last_frame_closure.forget();
     show_grid_closure.forget();
     initial_state_upload_input_closure.forget();
     select_initial_state_closure.forget();
@@ -295,6 +315,44 @@ fn create_next_frame_closure(app_state_rc: Rc<RefCell<app_state::AppState>>, sta
     }) as Box<dyn Fn()>)
 }
 
+fn create_enable_last_frame_closure(app_state_rc: Rc<RefCell<app_state::AppState>>) -> Closure<dyn Fn(web_sys::Event)>
+{
+    Closure::wrap(Box::new(move |event: web_sys::Event|
+    {
+        let mut app_state = app_state_rc.borrow_mut();
+
+        let document         = web_sys::window().unwrap().document().unwrap();
+        let last_frame_input = document.get_element_by_id("last_frame_number").unwrap().dyn_into::<web_sys::HtmlInputElement>().unwrap();
+
+        let last_frame_checkbox = event.target().unwrap().dyn_into::<web_sys::HtmlInputElement>().unwrap();
+        if last_frame_checkbox.checked()
+        {
+            app_state.last_frame = last_frame_input.value_as_number() as u32;
+            last_frame_input.set_disabled(false);
+        }
+        else
+        {
+            app_state.last_frame = u32::MAX;
+            last_frame_input.set_disabled(true);
+        }
+    }) as Box<dyn Fn(web_sys::Event)>)
+}
+
+fn create_change_last_frame_closure(app_state_rc: Rc<RefCell<app_state::AppState>>) -> Closure<dyn Fn(web_sys::Event)>
+{
+    Closure::wrap(Box::new(move |event: web_sys::Event|
+    {
+        let mut app_state = app_state_rc.borrow_mut();
+
+        let last_frame_input = event.target().unwrap().dyn_into::<web_sys::HtmlInputElement>().unwrap();
+        if app_state.last_frame != u32::MAX
+        {
+            app_state.last_frame = last_frame_input.value_as_number() as u32;
+        }
+
+    }) as Box<dyn Fn(web_sys::Event)>)
+}
+
 fn create_show_grid_closure(stafra_state_rc: Rc<RefCell<stafra_state::StafraState>>) -> Closure<dyn Fn(web_sys::Event)>
 {
     Closure::wrap(Box::new(move |event: web_sys::Event|
@@ -306,10 +364,11 @@ fn create_show_grid_closure(stafra_state_rc: Rc<RefCell<stafra_state::StafraStat
     }) as Box<dyn Fn(web_sys::Event)>)
 }
 
-fn create_board_upload_input_closure(stafra_state_rc: Rc<RefCell<stafra_state::StafraState>>) -> Closure<dyn Fn(web_sys::Event)>
+fn create_board_upload_input_closure(app_state_rc: Rc<RefCell<app_state::AppState>>, stafra_state_rc: Rc<RefCell<stafra_state::StafraState>>) -> Closure<dyn Fn(web_sys::Event)>
 {
     let board_upload_image_closure = Closure::wrap(Box::new(move |event: web_sys::Event|
     {
+        let mut app_state    = app_state_rc.borrow_mut();
         let mut stafra_state = stafra_state_rc.borrow_mut();
 
         let board_image = event.target().unwrap().dyn_into::<web_sys::HtmlImageElement>().unwrap();
@@ -328,12 +387,14 @@ fn create_board_upload_input_closure(stafra_state_rc: Rc<RefCell<stafra_state::S
 
         canvas_board.remove();
 
+
         let size_select = document.get_element_by_id("sizes").unwrap().dyn_into::<web_sys::HtmlSelectElement>().unwrap();
         let new_size = std::cmp::min(stafra_state.board_width(), stafra_state.board_height());
 
         let size_index = (std::mem::size_of::<u32>() * 8) as u32 - new_size.leading_zeros() - 1;
         size_select.set_selected_index(size_index as i32);
 
+        update_last_frame_with_size(new_size, &mut app_state);
     }) as Box<dyn Fn(web_sys::Event)>);
 
     let board_upload_image_element = web_sys::HtmlImageElement::new().unwrap();
@@ -417,10 +478,11 @@ fn create_select_initial_state_closure(stafra_state_rc: Rc<RefCell<stafra_state:
     }) as Box<dyn Fn(web_sys::Event)>)
 }
 
-fn create_select_size_closure(stafra_state_rc: Rc<RefCell<stafra_state::StafraState>>) -> Closure<dyn Fn(web_sys::Event)>
+fn create_select_size_closure(app_state_rc: Rc<RefCell<app_state::AppState>>, stafra_state_rc: Rc<RefCell<stafra_state::StafraState>>) -> Closure<dyn Fn(web_sys::Event)>
 {
     Closure::wrap(Box::new(move |event: web_sys::Event|
     {
+        let mut app_state    = app_state_rc.borrow_mut();
         let mut stafra_state = stafra_state_rc.borrow_mut();
 
         let size_select = event.target().unwrap().dyn_into::<web_sys::HtmlSelectElement>().unwrap();
@@ -429,6 +491,7 @@ fn create_select_size_closure(stafra_state_rc: Rc<RefCell<stafra_state::StafraSt
         let new_width  = app_state::AppState::board_size_from_index(board_size_selected_index);
         let new_height = app_state::AppState::board_size_from_index(board_size_selected_index);
 
+        update_last_frame_with_size(std::cmp::min(new_width, new_height), &mut app_state);
         stafra_state.resize_board(new_width, new_height);
     }) as Box<dyn Fn(web_sys::Event)>)
 }
@@ -494,4 +557,18 @@ fn update_ui(run_state: &RunState)
 
     let size_select = document.get_element_by_id("sizes").unwrap().dyn_into::<web_sys::HtmlSelectElement>().unwrap();
     size_select.set_disabled(run_state != &RunState::Stopped);
+}
+
+fn update_last_frame_with_size(new_size: u32, app_state: &mut app_state::AppState)
+{
+    let document         = web_sys::window().unwrap().document().unwrap();
+    let last_frame_input = document.get_element_by_id("last_frame_number").unwrap().dyn_into::<web_sys::HtmlInputElement>().unwrap();
+
+    let new_last_frame = new_size / 2;
+    last_frame_input.set_value_as_number(new_last_frame as f64);
+
+    if app_state.last_frame != u32::MAX
+    {
+        app_state.last_frame = new_last_frame;
+    }
 }

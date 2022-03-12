@@ -50,6 +50,19 @@
   margin-top:            2em;
 }
 
+#last_frame_checkbox_div
+{
+    display:        flex;
+    flex-direction: row;
+    margin-top:     2em;
+}
+
+#last_frame_number
+{
+    width:       7em;
+    margin-left: 1em;
+}
+
 #initial_states
 {
     height: auto;

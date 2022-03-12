@@ -1330,6 +1330,11 @@ impl StafraState
         self.board_bindings.board_height
     }
 
+    pub fn frame_number(&self) -> u32
+    {
+        self.frame_number
+    }
+
     pub fn resize(&mut self, new_width: u32, new_height: u32)
     {
         self.main_surface.configure(&self.device, &wgpu::SurfaceConfiguration
