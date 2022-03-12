@@ -173,21 +173,21 @@ fn main(@builtin(local_invocation_id) local_thread_id: vec3<u32>, @builtin(globa
         //X X X
         //The threads saving the data for the block are the ones that, having the original block shifted to the one being saved,
         //have global_thread_id.xy still in bounds of extra_radius_quads
-        let right_region_start:  u32 = workgroup_threads_x - extra_radius_quads - 1u;
-        let bottom_region_start: u32 = workgroup_threads_y - extra_radius_quads - 1u;
+        let right_region_start:  u32 = workgroup_threads_x - extra_radius_quads;
+        let bottom_region_start: u32 = workgroup_threads_y - extra_radius_quads;
         let left_region_end:     u32 = extra_radius_quads;
         let top_region_end:      u32 = extra_radius_quads;
 
         let in_blocks = array<bool, 8>
         (
-            (local_thread_id.x > right_region_start) && (local_thread_id.y > bottom_region_start),
-                                                        (local_thread_id.y > bottom_region_start),
-            (local_thread_id.x < left_region_end)    && (local_thread_id.y > bottom_region_start),
-            (local_thread_id.x > right_region_start),
-            (local_thread_id.x < left_region_end),
-            (local_thread_id.x > right_region_start) && (local_thread_id.y < top_region_end),
-                                                        (local_thread_id.y < top_region_end),
-            (local_thread_id.x < left_region_end)    && (local_thread_id.y < top_region_end)
+            (local_thread_id.x >= right_region_start) && (local_thread_id.y >= bottom_region_start),
+                                                         (local_thread_id.y >= bottom_region_start),
+            (local_thread_id.x <  left_region_end)    && (local_thread_id.y >= bottom_region_start),
+            (local_thread_id.x >= right_region_start),
+            (local_thread_id.x <  left_region_end),
+            (local_thread_id.x >= right_region_start) && (local_thread_id.y < top_region_end),
+                                                         (local_thread_id.y < top_region_end),
+            (local_thread_id.x <  left_region_end)    && (local_thread_id.y < top_region_end)
         );
 
         let block_offsets = array<vec2<i32>, 8>

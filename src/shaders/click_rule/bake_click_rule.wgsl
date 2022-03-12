@@ -15,6 +15,11 @@ struct ClickRuleData
 @stage(compute) @workgroup_size(8, 8)
 fn main(@builtin(global_invocation_id) global_thread_id: vec3<u32>)
 {
+    if(any(global_thread_id.xy > vec2<u32>(click_rule_width - 1u, click_rule_height - 1u)))
+    {
+        return;
+    }
+
     let click_rule_value = textureLoad(click_rule_tex, vec2<i32>(global_thread_id.xy), 0).x;
     if(click_rule_value != 0u)
     {
