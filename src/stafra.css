@@ -26,20 +26,38 @@
     margin-left:    1em;
 }
 
+#state_selection_menus
+{
+    display: grid;
+}
+
 #initial_state_menu
 {
-    display:        flex;
-    flex-direction: row;
+    display:               inline-grid;
+    grid-template-columns: 1fr 1fr;
+}
+
+#size_menu
+{
+    display:               inline-grid;
+    grid-template-columns: 1fr 1fr;
 }
 
 #control_buttons
 {
   display:               grid;
-  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-columns: 2fr 2fr 2fr;
   margin-top:            2em;
 }
 
 #initial_states
+{
+    height: auto;
+    margin-left: 0.5em;
+    width: 8em;
+}
+
+#sizes
 {
     height: auto;
     margin-left: 0.5em;
