@@ -32,6 +32,8 @@ pub async fn run_event_loop()
     let initial_state_select       = document.get_element_by_id("initial_states").unwrap().dyn_into::<web_sys::HtmlSelectElement>().unwrap();
     let initial_state_upload_input = document.get_element_by_id("board_input").unwrap().dyn_into::<web_sys::HtmlInputElement>().unwrap();
 
+    let size_select = document.get_element_by_id("sizes").unwrap().dyn_into::<web_sys::HtmlSelectElement>().unwrap();
+
 
     //Apparently it's necessary to do it, width and height are not set up automatically
     main_canvas.set_width((main_canvas.client_width()   as f64 * window.device_pixel_ratio()) as u32);
@@ -469,4 +471,7 @@ fn update_ui(run_state: &RunState)
 
     let initial_board_select = document.get_element_by_id("initial_states").unwrap().dyn_into::<web_sys::HtmlSelectElement>().unwrap();
     initial_board_select.set_disabled(run_state != &RunState::Stopped);
+
+    let size_select = document.get_element_by_id("sizes").unwrap().dyn_into::<web_sys::HtmlSelectElement>().unwrap();
+    size_select.set_disabled(run_state != &RunState::Stopped);
 }

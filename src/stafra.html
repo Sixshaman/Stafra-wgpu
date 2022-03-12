@@ -27,15 +27,37 @@
             </div>
 
             <div id="right_part">
-                <div id="initial_state_menu">
-                    <label for="initial_states">Initial state: </label>
-                    <select id="initial_states">
-                        <option value="initial_state_custom_value" disabled hidden></option>
-                        <option value="initial_state_corners" selected>Corners</option>
-                        <option value="initial_state_sides">Sides</option>
-                        <option value="initial_state_center">Center</option>
-                        <option value="initial_state_custom">Custom...</option>
-                    </select>
+                <div id="state_selection_menus">
+                    <div id="initial_state_menu">
+                        <label for="initial_states">Initial state: </label>
+                        <select id="initial_states">
+                            <option value="initial_state_custom_value" disabled hidden></option>
+                            <option value="initial_state_corners" selected>Corners</option>
+                            <option value="initial_state_sides">Sides</option>
+                            <option value="initial_state_center">Center</option>
+                            <option value="initial_state_custom">Custom...</option>
+                        </select>
+                    </div>
+
+                    <div id="size_menu">
+                        <label for="sizes">Size: </label>
+                        <select id="sizes">
+                            <option value="size_1">1x1</option>
+                            <option value="size_3">3x3</option>
+                            <option value="size_7">5x5</option>
+                            <option value="size_15">7x7</option>
+                            <option value="size_31">15x15</option>
+                            <option value="size_63">31x31</option>
+                            <option value="size_127">127x127</option>
+                            <option value="size_255">255x255</option>
+                            <option value="size_511">511x511</option>
+                            <option value="size_1023" selected>1023x1023</option>
+                            <option value="size_2147">2147x2147</option>
+                            <option value="size_4095">4095x4095</option>
+                            <option value="size_8191">8191x8191</option>
+                            <option value="size_16383">16383x16383</option>
+                        </select>
+                    </div>
                 </div>
 
                 <div id="control_buttons">
