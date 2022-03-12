@@ -47,12 +47,20 @@ struct StafraClickRuleBindings
     click_rule_render_state_bind_group: wgpu::BindGroup,
     bake_click_rule_bind_group:         wgpu::BindGroup,
 
+    click_rule_render_flags: u32,
+
     #[allow(dead_code)]
     click_rule_texture:             wgpu::Texture,
     #[allow(dead_code)]
     click_rule_buffer:              wgpu::Buffer,
     #[allow(dead_code)]
     click_rule_render_flags_buffer: wgpu::Buffer,
+}
+
+struct StafraInitialStateBindings
+{
+    #[allow(dead_code)]
+    initial_state: wgpu::Texture,
 }
 
 struct StafraBoardBindings
@@ -71,8 +79,6 @@ struct StafraBoardBindings
     clear_stability_bind_group_b:       wgpu::BindGroup,
     generate_mip_bind_groups:           Vec<wgpu::BindGroup>,
 
-    #[allow(dead_code)]
-    initial_state:     wgpu::Texture,
     #[allow(dead_code)]
     current_board:     wgpu::Texture,
     #[allow(dead_code)]
@@ -125,11 +131,10 @@ pub struct StafraState
     save_png_request: Option<SavePngRequest>,
     last_reset_type:  ResetBoardType,
 
-    click_rule_render_flags: u32,
-
-    binding_layouts:     StafraBindingLayouts,
-    click_rule_bindings: StafraClickRuleBindings,
-    board_bindings:      StafraBoardBindings,
+    binding_layouts:        StafraBindingLayouts,
+    click_rule_bindings:    StafraClickRuleBindings,
+    initial_state_bindings: StafraInitialStateBindings,
+    board_bindings:         StafraBoardBindings,
 }
 
 impl StafraBindingLayouts
@@ -469,6 +474,34 @@ impl StafraBindingLayouts
     }
 }
 
+impl StafraInitialStateBindings
+{
+    fn new(device: &wgpu::Device, board_width: u32, board_height: u32) -> Self
+    {
+        let initial_state_texture_descriptor = wgpu::TextureDescriptor
+        {
+            label: None,
+            size:  wgpu::Extent3d
+            {
+                width:                 board_width,
+                height:                board_height,
+                depth_or_array_layers: 1
+            },
+            mip_level_count: 1,
+            sample_count:    1,
+            dimension:       wgpu::TextureDimension::D2,
+            format:          wgpu::TextureFormat::Rgba8Unorm,
+            usage:           wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST
+        };
+
+        let initial_state = device.create_texture(&initial_state_texture_descriptor);
+        Self
+        {
+            initial_state
+        }
+    }
+}
+
 impl StafraClickRuleBindings
 {
     fn new(device: &wgpu::Device, binding_layouts: &StafraBindingLayouts) -> Self
@@ -570,6 +603,8 @@ impl StafraClickRuleBindings
             click_rule_render_state_bind_group,
             bake_click_rule_bind_group,
 
+            click_rule_render_flags: 0,
+
             click_rule_texture,
             click_rule_buffer,
             click_rule_render_flags_buffer
@@ -579,29 +614,13 @@ impl StafraClickRuleBindings
 
 impl StafraBoardBindings
 {
-    fn new(device: &wgpu::Device, binding_layouts: &StafraBindingLayouts, click_rule_bindings: &StafraClickRuleBindings, width: u32, height: u32) -> Self
+    fn new(device: &wgpu::Device, binding_layouts: &StafraBindingLayouts, click_rule_bindings: &StafraClickRuleBindings, initial_state_bindings: &StafraInitialStateBindings, width: u32, height: u32) -> Self
     {
         assert!((width  + 1).is_power_of_two());
         assert!((height + 1).is_power_of_two());
 
         let board_width  = width;
         let board_height = height;
-
-        let initial_state_texture_descriptor = wgpu::TextureDescriptor
-        {
-            label: None,
-            size:  wgpu::Extent3d
-            {
-                width:                 board_width,
-                height:                board_height,
-                depth_or_array_layers: 1
-            },
-            mip_level_count: 1,
-            sample_count:    1,
-            dimension:       wgpu::TextureDimension::D2,
-            format:          wgpu::TextureFormat::Rgba8Unorm,
-            usage:           wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST
-        };
 
         let board_texture_descriptor = wgpu::TextureDescriptor
         {
@@ -636,7 +655,6 @@ impl StafraBoardBindings
             usage:           wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::STORAGE_BINDING | wgpu::TextureUsages::COPY_SRC
         };
 
-        let initial_state      = device.create_texture(&initial_state_texture_descriptor);
         let current_board      = device.create_texture(&board_texture_descriptor);
         let next_board         = device.create_texture(&board_texture_descriptor);
         let current_stability  = device.create_texture(&board_texture_descriptor);
@@ -679,7 +697,7 @@ impl StafraBoardBindings
             array_layer_count: None
         };
 
-        let initial_state_view      = initial_state.create_view(&initial_state_view_descriptor);
+        let initial_state_view      = initial_state_bindings.initial_state.create_view(&initial_state_view_descriptor);
         let current_board_view      = current_board.create_view(&board_view_descriptor);
         let next_board_view         = next_board.create_view(&board_view_descriptor);
         let current_stability_view  = current_stability.create_view(&board_view_descriptor);
@@ -940,7 +958,6 @@ impl StafraBoardBindings
             clear_stability_bind_group_b,
             generate_mip_bind_groups,
 
-            initial_state,
             current_board,
             next_board,
             current_stability,
@@ -1043,9 +1060,10 @@ impl StafraState
 
         let generate_mip_module = device.create_shader_module(&wgpu::include_wgsl!("../target/shaders/final_state_generate_next_mip.wgsl"));
 
-        let binding_layouts     = StafraBindingLayouts::new(&device);
-        let click_rule_bindings = StafraClickRuleBindings::new(&device, &binding_layouts);
-        let board_bindings      = StafraBoardBindings::new(&device, &binding_layouts, &click_rule_bindings, board_width, board_height);
+        let binding_layouts        = StafraBindingLayouts::new(&device);
+        let click_rule_bindings    = StafraClickRuleBindings::new(&device, &binding_layouts);
+        let initial_state_bindings = StafraInitialStateBindings::new(&device, board_width, board_height);
+        let board_bindings         = StafraBoardBindings::new(&device, &binding_layouts, &click_rule_bindings, &initial_state_bindings, board_width, board_height);
 
         let main_render_state_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor
         {
@@ -1295,10 +1313,9 @@ impl StafraState
             save_png_request: None,
             last_reset_type:  ResetBoardType::Standard{reset_type: StandardResetBoardType::Corners},
 
-            click_rule_render_flags: 0,
-
             binding_layouts,
             click_rule_bindings,
+            initial_state_bindings,
             board_bindings
         }
     }
@@ -1491,14 +1508,14 @@ impl StafraState
         let render_grid_flag = 0x01;
         if enable
         {
-            self.click_rule_render_flags |= render_grid_flag;
+            self.click_rule_bindings.click_rule_render_flags |= render_grid_flag;
         }
         else
         {
-            self.click_rule_render_flags &= !render_grid_flag;
+            self.click_rule_bindings.click_rule_render_flags &= !render_grid_flag;
         }
 
-        let buffer_data = self.click_rule_render_flags.to_le_bytes();
+        let buffer_data = self.click_rule_bindings.click_rule_render_flags.to_le_bytes();
         self.queue.write_buffer(&self.click_rule_bindings.click_rule_render_flags_buffer, 0, &buffer_data);
     }
 
@@ -1507,14 +1524,14 @@ impl StafraState
         let click_rule_read_only_flag = 0x02;
         if is_read_only
         {
-            self.click_rule_render_flags |= click_rule_read_only_flag;
+            self.click_rule_bindings.click_rule_render_flags |= click_rule_read_only_flag;
         }
         else
         {
-            self.click_rule_render_flags &= !click_rule_read_only_flag;
+            self.click_rule_bindings.click_rule_render_flags &= !click_rule_read_only_flag;
         }
 
-        let buffer_data = self.click_rule_render_flags.to_le_bytes();
+        let buffer_data = self.click_rule_bindings.click_rule_render_flags.to_le_bytes();
         self.queue.write_buffer(&self.click_rule_bindings.click_rule_render_flags_buffer, 0, &buffer_data);
     }
 
@@ -1544,11 +1561,12 @@ impl StafraState
     {
         //Crop to the largest possible square with sides of 2^n - 1
         let cropped_size = (min(width, height) + 2).next_power_of_two() / 2 - 1;
-        self.board_bindings = StafraBoardBindings::new(&self.device, &self.binding_layouts, &self.click_rule_bindings, cropped_size, cropped_size);
+        self.initial_state_bindings = StafraInitialStateBindings::new(&self.device, cropped_size, cropped_size);
+        self.board_bindings = StafraBoardBindings::new(&self.device, &self.binding_layouts, &self.click_rule_bindings, &self.initial_state_bindings, cropped_size, cropped_size);
 
         self.queue.write_texture(wgpu::ImageCopyTexture
         {
-            texture:   &self.board_bindings.initial_state,
+            texture:   &self.initial_state_bindings.initial_state,
             mip_level: 0,
             origin:    wgpu::Origin3d::ZERO,
             aspect:    wgpu::TextureAspect::All
@@ -1574,8 +1592,7 @@ impl StafraState
     pub fn resize_board(&mut self, new_width: u32, new_height: u32)
     {
         let cropped_size = (min(new_width, new_height) + 2).next_power_of_two() / 2 - 1;
-        self.board_bindings = StafraBoardBindings::new(&self.device, &self.binding_layouts, &self.click_rule_bindings, cropped_size, cropped_size);
-
+        self.board_bindings = StafraBoardBindings::new(&self.device, &self.binding_layouts, &self.click_rule_bindings, &self.initial_state_bindings, cropped_size, cropped_size);
         self.reset_board_unchanged();
     }
 
