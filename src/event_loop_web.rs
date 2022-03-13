@@ -10,7 +10,10 @@ use
 
 use super::stafra_state;
 use super::app_state;
+use super::video_record_state;
+
 use crate::app_state::RunState;
+use crate::stafra_state::AcquireImageResult;
 
 pub async fn run_event_loop()
 {
@@ -51,11 +54,13 @@ pub async fn run_event_loop()
     let initial_width  = app_state::AppState::board_size_from_index(board_size_selected_index);
     let initial_height = app_state::AppState::board_size_from_index(board_size_selected_index);
 
-    let app_state_rc    = Rc::new(RefCell::new(app_state::AppState::new()));
-    let stafra_state_rc = Rc::new(RefCell::new(stafra_state::StafraState::new_web(&main_canvas, &click_rule_canvas, initial_width, initial_height).await));
+    let app_state_rc          = Rc::new(RefCell::new(app_state::AppState::new()));
+    let stafra_state_rc       = Rc::new(RefCell::new(stafra_state::StafraState::new_web(&main_canvas, &click_rule_canvas, initial_width, initial_height).await));
+    let video_record_state_rc = Rc::new(RefCell::new(video_record_state::VideoRecordState::new()));
 
-    let mut app_state    = app_state_rc.borrow_mut();
-    let mut stafra_state = stafra_state_rc.borrow_mut();
+    let mut app_state          = app_state_rc.borrow_mut();
+    let mut stafra_state       = stafra_state_rc.borrow_mut();
+    let mut video_record_state = video_record_state_rc.borrow_mut();
 
     app_state.run_state = RunState::Running;
 
@@ -71,8 +76,8 @@ pub async fn run_event_loop()
     let save_png_closure = create_save_png_closure(stafra_state_rc.clone());
 
     let play_pause_closure = create_play_pause_closure(app_state_rc.clone(), stafra_state_rc.clone());
-    let stop_closure       = create_stop_closure(app_state_rc.clone(), stafra_state_rc.clone());
-    let next_frame_closure = create_next_frame_closure(app_state_rc.clone(), stafra_state_rc.clone());
+    let stop_closure       = create_stop_closure(app_state_rc.clone(), stafra_state_rc.clone(), video_record_state_rc.clone());
+    let next_frame_closure = create_next_frame_closure(app_state_rc.clone(), stafra_state_rc.clone(), video_record_state_rc.clone());
 
     let enable_last_frame_closure = create_enable_last_frame_closure(app_state_rc.clone());
     let change_last_frame_closure = create_change_last_frame_closure(app_state_rc.clone());
@@ -106,8 +111,9 @@ pub async fn run_event_loop()
 
 
     //Refresh handler
-    let app_state_clone_for_refresh    = app_state_rc.clone();
-    let stafra_state_clone_for_refresh = stafra_state_rc.clone();
+    let app_state_clone_for_refresh          = app_state_rc.clone();
+    let stafra_state_clone_for_refresh       = stafra_state_rc.clone();
+    let video_record_state_clone_for_refresh = video_record_state_rc.clone();
 
     //Apparently the only way to detect canvas resize is to keep track of its size and compare it to the actual one each frame
     let mut current_main_canvas_width        = main_canvas.width();
@@ -119,25 +125,31 @@ pub async fn run_event_loop()
     let refresh_function_copy = refresh_function.clone();
     *refresh_function_copy.borrow_mut() = Some(Closure::wrap(Box::new(move ||
     {
-        let mut app_state    = app_state_clone_for_refresh.borrow_mut();
-        let mut stafra_state = stafra_state_clone_for_refresh.borrow_mut();
+        let mut app_state          = app_state_clone_for_refresh.borrow_mut();
+        let mut stafra_state       = stafra_state_clone_for_refresh.borrow_mut();
+        let mut video_record_state = video_record_state_clone_for_refresh.borrow_mut();
 
         let window = web_sys::window().unwrap();
 
         //Poll video frames
-        if app_state.run_state == RunState::Recording || app_state.run_state == RunState::PausedRecording
+        if video_record_state.recorded_frame_count < video_record_state.max_frame_count
         {
-            while let Ok(video_frame_data) = stafra_state.grab_video_frame()
+            while let AcquireImageResult::AcquireSuccess{pixel_data, width, height, row_pitch} = stafra_state.grab_video_frame()
             {
-                //update_video_data(video_frame_data);
+                video_record_state.add_video_frame(pixel_data, width, height, row_pitch);
             }
         }
 
         //Poll PNG save request
-        if let Ok(image_buffer_data) = stafra_state.check_save_png_request()
+        if let AcquireImageResult::AcquireSuccess{pixel_data, width, height, row_pitch} = stafra_state.check_save_png_request()
         {
-            let image_data = web_sys::ImageData::new_with_u8_clamped_array(Clamped(image_buffer_data.pixel_data.as_slice()), image_buffer_data.row_pitch).unwrap();
-            save_image_data(image_data, image_buffer_data.width, image_buffer_data.height);
+            let image_data = web_sys::ImageData::new_with_u8_clamped_array(Clamped(pixel_data.as_slice()), row_pitch).unwrap();
+            save_image_data(image_data, width, height);
+        }
+
+        if video_record_state.max_frame_count != 0 && video_record_state.recorded_frame_count == video_record_state.max_frame_count
+        {
+            video_record_state.save_video();
         }
 
         if app_state.run_state == RunState::Running
@@ -151,7 +163,7 @@ pub async fn run_event_loop()
 
             if app_state.last_frame == stafra_state.frame_number()
             {
-                //schedule_save_video_when_finished();
+                video_record_state.max_frame_count = stafra_state.frame_number();
             }
         }
         else if app_state.run_state == RunState::PausedRecording
@@ -311,46 +323,53 @@ fn create_play_pause_closure(app_state_rc: Rc<RefCell<app_state::AppState>>, sta
     }) as Box<dyn Fn()>)
 }
 
-fn create_stop_closure(app_state_rc: Rc<RefCell<app_state::AppState>>, stafra_state_rc: Rc<RefCell<stafra_state::StafraState>>) -> Closure<dyn Fn()>
+fn create_stop_closure(app_state_rc: Rc<RefCell<app_state::AppState>>, stafra_state_rc: Rc<RefCell<stafra_state::StafraState>>, video_record_state_rc: Rc<RefCell<video_record_state::VideoRecordState>>) -> Closure<dyn Fn()>
 {
     Closure::wrap(Box::new(move ||
     {
-        let mut app_state    = app_state_rc.borrow_mut();
-        let mut stafra_state = stafra_state_rc.borrow_mut();
+        let mut app_state          = app_state_rc.borrow_mut();
+        let mut stafra_state       = stafra_state_rc.borrow_mut();
+        let mut video_record_state = video_record_state_rc.borrow_mut();
 
         match app_state.run_state
         {
             RunState::Stopped =>
             {
-                start_recording();
+                video_record_state.recorded_frame_count = 0;
+                video_record_state.max_frame_count      = u32::MAX;
+
                 app_state.run_state = RunState::Recording;
             }
 
             RunState::Recording | RunState::PausedRecording =>
             {
-                save_recording();
-                app_state.run_state = RunState::Stopped;
+                video_record_state.max_frame_count = stafra_state.frame_number();
+                app_state.run_state                = RunState::Stopped;
+
+                stafra_state.reset_board_unchanged();
+                stafra_state.set_click_rule_read_only(false);
             }
 
             RunState::Paused | RunState::Running =>
             {
                 app_state.run_state = RunState::Stopped;
+
+                stafra_state.reset_board_unchanged();
+                stafra_state.set_click_rule_read_only(false);
             }
         };
-
-        stafra_state.reset_board_unchanged();
-        stafra_state.set_click_rule_read_only(false);
 
         update_ui(app_state.run_state);
     }) as Box<dyn Fn()>)
 }
 
-fn create_next_frame_closure(app_state_rc: Rc<RefCell<app_state::AppState>>, stafra_state_rc: Rc<RefCell<stafra_state::StafraState>>) -> Closure<dyn Fn()>
+fn create_next_frame_closure(app_state_rc: Rc<RefCell<app_state::AppState>>, stafra_state_rc: Rc<RefCell<stafra_state::StafraState>>, video_record_state_rc: Rc<RefCell<video_record_state::VideoRecordState>>) -> Closure<dyn Fn()>
 {
     Closure::wrap(Box::new(move ||
     {
-        let mut app_state    = app_state_rc.borrow_mut();
-        let mut stafra_state = stafra_state_rc.borrow_mut();
+        let mut app_state          = app_state_rc.borrow_mut();
+        let mut stafra_state       = stafra_state_rc.borrow_mut();
+        let mut video_record_state = video_record_state_rc.borrow_mut();
 
         if app_state.run_state == RunState::PausedRecording && !stafra_state.video_frame_queue_full()
         {
@@ -361,7 +380,7 @@ fn create_next_frame_closure(app_state_rc: Rc<RefCell<app_state::AppState>>, sta
 
             if app_state.last_frame == stafra_state.frame_number()
             {
-                //schedule_save_video_when_finished();
+                video_record_state.max_frame_count = stafra_state.frame_number();
                 app_state.run_state = RunState::Paused;
             }
         }
@@ -647,14 +666,4 @@ fn update_last_frame_with_size(new_size: u32, app_state: &mut app_state::AppStat
     {
         app_state.last_frame = new_last_frame;
     }
-}
-
-fn start_recording()
-{
-    web_sys::console::log_1(&format!("{:?}", "Recording started!").into());
-}
-
-fn save_recording()
-{
-    web_sys::console::log_1(&format!("{:?}", "Recording finished!").into());
 }

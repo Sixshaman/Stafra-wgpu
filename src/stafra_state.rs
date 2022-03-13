@@ -19,12 +19,17 @@ use
     std::pin::Pin
 };
 
-pub struct ImageBufferData
+pub enum AcquireImageResult
 {
-    pub pixel_data: Vec<u8>,
-    pub width:      u32,
-    pub height:     u32,
-    pub row_pitch:  u32
+    Pending,
+    NoImagesRequested,
+    AcquireSuccess
+    {
+        pixel_data: Vec<u8>,
+        width:      u32,
+        height:     u32,
+        row_pitch:  u32
+    }
 }
 
 struct ImageCopyRequest
@@ -1523,11 +1528,11 @@ impl StafraState
     }
 
     #[cfg(target_arch = "wasm32")]
-    pub fn check_save_png_request(&mut self) -> Result<ImageBufferData, String>
+    pub fn check_save_png_request(&mut self) -> AcquireImageResult
     {
         if let None = &self.save_png_request
         {
-            return Err("Not requested".to_string());
+            return AcquireImageResult::NoImagesRequested;
         }
 
         let unwrapped_request = &mut self.save_png_request.as_mut().unwrap();
@@ -1598,25 +1603,25 @@ impl StafraState
                 save_png_buffer.unmap();
 
                 self.save_png_request = None;
-                Ok(ImageBufferData
+                AcquireImageResult::AcquireSuccess
                 {
                     pixel_data: image_array,
                     width:      padded_width,
                     height:     padded_height,
                     row_pitch:  row_pitch as u32
-                })
+                }
             }
 
-            std::task::Poll::Pending => Err("Pending".to_string())
+            std::task::Poll::Pending => AcquireImageResult::Pending
         }
     }
 
     #[cfg(target_arch = "wasm32")]
-    pub fn grab_video_frame(&mut self) -> Result<ImageBufferData, String>
+    pub fn grab_video_frame(&mut self) -> AcquireImageResult
     {
         if self.video_frame_request_queue.is_empty()
         {
-            return Err("No buffer copies scheduled".to_string());
+            return AcquireImageResult::NoImagesRequested;
         }
 
         let video_frame_buffer_request = self.video_frame_request_queue.front_mut().unwrap();
@@ -1657,16 +1662,16 @@ impl StafraState
                 }
 
                 video_frame_request_data.image_buffer.unmap();
-                Ok(ImageBufferData
+                AcquireImageResult::AcquireSuccess
                 {
                     pixel_data: video_frame_image_array,
                     width:      video_frame_width as u32,
                     height:     video_frame_height as u32,
                     row_pitch:  video_frame_request_data.row_pitch as u32
-                })
+                }
             }
 
-            std::task::Poll::Pending => Err("Pending".to_string())
+            std::task::Poll::Pending => AcquireImageResult::Pending
         }
     }
 

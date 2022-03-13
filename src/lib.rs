@@ -1,8 +1,9 @@
 #![cfg(target_arch = "wasm32")]
 
-mod dummy_waker;
-mod app_state;
-mod stafra_state;
+pub mod dummy_waker;
+pub mod app_state;
+pub mod stafra_state;
+pub mod video_record_state;
 mod event_loop_web;
 
 use wasm_bindgen::prelude::*;
