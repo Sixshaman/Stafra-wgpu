@@ -3,7 +3,9 @@ pub enum RunState
 {
     Stopped,
     Paused,
-    Running
+    Running,
+    Recording,
+    PausedRecording
 }
 
 pub struct AppState
