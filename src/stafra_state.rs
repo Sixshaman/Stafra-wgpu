@@ -19,11 +19,19 @@ use
     std::pin::Pin
 };
 
-struct SavePngRequest
+pub struct ImageBufferData
 {
-    save_png_buffer: wgpu::Buffer,
-    save_png_future: Box<dyn Future<Output = Result<(), wgpu::BufferAsyncError>> + Unpin>,
-    row_pitch:       usize
+    pub pixel_data: Vec<u8>,
+    pub width:      u32,
+    pub height:     u32,
+    pub row_pitch:  u32
+}
+
+struct ImageCopyRequest
+{
+    image_buffer:      wgpu::Buffer,
+    buffer_map_future: Box<dyn Future<Output = Result<(), wgpu::BufferAsyncError>> + Unpin>,
+    row_pitch:         usize
 }
 
 struct StafraBindingLayouts
@@ -88,7 +96,9 @@ struct StafraBoardBindings
     #[allow(dead_code)]
     next_stability:    wgpu::Texture,
     #[allow(dead_code)]
-    final_state:       wgpu::Texture
+    final_state:       wgpu::Texture,
+    #[allow(dead_code)]
+    video_frame:       wgpu::Texture
 }
 
 #[derive(Copy, Clone, PartialEq)]
@@ -128,8 +138,9 @@ pub struct StafraState
     next_step_pipeline:               wgpu::ComputePipeline,
     generate_mip_pipeline:            wgpu::ComputePipeline,
 
-    save_png_request: Option<SavePngRequest>,
-    last_reset_type:  ResetBoardType,
+    save_png_request:          Option<ImageCopyRequest>,
+    video_frame_request_queue: std::collections::vec_deque::VecDeque<ImageCopyRequest>,
+    last_reset_type:           ResetBoardType,
 
     binding_layouts:        StafraBindingLayouts,
     click_rule_bindings:    StafraClickRuleBindings,
@@ -655,11 +666,28 @@ impl StafraBoardBindings
             usage:           wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::STORAGE_BINDING | wgpu::TextureUsages::COPY_SRC
         };
 
+        let video_frame_texture_descriptor = wgpu::TextureDescriptor
+        {
+            label: None,
+            size:  wgpu::Extent3d
+            {
+                width:                 1024,
+                height:                1024,
+                depth_or_array_layers: 1
+            },
+            mip_level_count: 1,
+            sample_count:    1,
+            dimension:       wgpu::TextureDimension::D2,
+            format:          wgpu::TextureFormat::Rgba8Unorm,
+            usage:           wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC
+        };
+
         let current_board      = device.create_texture(&board_texture_descriptor);
         let next_board         = device.create_texture(&board_texture_descriptor);
         let current_stability  = device.create_texture(&board_texture_descriptor);
         let next_stability     = device.create_texture(&board_texture_descriptor);
         let final_state        = device.create_texture(&final_state_texture_descriptor);
+        let video_frame        = device.create_texture(&video_frame_texture_descriptor);
 
         let initial_state_view_descriptor = wgpu::TextureViewDescriptor
         {
@@ -962,7 +990,8 @@ impl StafraBoardBindings
             next_board,
             current_stability,
             next_stability,
-            final_state
+            final_state,
+            video_frame
         }
     }
 }
@@ -1288,6 +1317,7 @@ impl StafraState
             entry_point: "main"
         });
 
+        let max_video_frame_requests = 5;
         Self
         {
             main_surface,
@@ -1310,8 +1340,9 @@ impl StafraState
             clear_stability_pipeline,
             generate_mip_pipeline,
 
-            save_png_request: None,
-            last_reset_type:  ResetBoardType::Standard{reset_type: StandardResetBoardType::Corners},
+            save_png_request:          None,
+            video_frame_request_queue: std::collections::vec_deque::VecDeque::with_capacity(max_video_frame_requests),
+            last_reset_type:           ResetBoardType::Standard{reset_type: StandardResetBoardType::Corners},
 
             binding_layouts,
             click_rule_bindings,
@@ -1333,6 +1364,11 @@ impl StafraState
     pub fn frame_number(&self) -> u32
     {
         self.frame_number
+    }
+
+    pub fn video_frame_queue_full(&self) -> bool
+    {
+        self.video_frame_request_queue.len() == self.video_frame_request_queue.capacity()
     }
 
     pub fn resize(&mut self, new_width: u32, new_height: u32)
@@ -1360,7 +1396,7 @@ impl StafraState
     }
 
     #[cfg(target_arch = "wasm32")]
-    pub fn post_png_data_request(&mut self)
+    pub fn post_save_png_request(&mut self)
     {
         if let Some(_) = &self.save_png_request
         {
@@ -1416,16 +1452,78 @@ impl StafraState
         let save_png_buffer_slice = save_png_buffer.slice(..);
         let save_png_future       = Box::new(save_png_buffer_slice.map_async(wgpu::MapMode::Read));
 
-        self.save_png_request = Some(SavePngRequest
+        self.save_png_request = Some(ImageCopyRequest
         {
-            save_png_buffer,
-            save_png_future,
+            image_buffer:      save_png_buffer,
+            buffer_map_future: save_png_future,
             row_pitch
         })
     }
 
     #[cfg(target_arch = "wasm32")]
-    pub fn check_png_data_request(&mut self) -> Result<(Vec<u8>, u32, u32, u32), String>
+    pub fn post_video_frame_request(&mut self)
+    {
+        let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor{label: None});
+        self.render_video_frame(&mut encoder);
+
+        let video_frame_width  = 1024;
+        let video_frame_height = 1024;
+
+        let row_alignment = 256 as usize;
+        let row_pitch     = (video_frame_width * 4 + row_alignment - 1) & (!(row_alignment - 1));
+
+        let video_frame_buffer = self.device.create_buffer(&wgpu::BufferDescriptor
+        {
+            label:              None,
+            size:               (row_pitch * video_frame_height as usize) as u64,
+            usage:              wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false
+        });
+
+        encoder.copy_texture_to_buffer(wgpu::ImageCopyTexture
+        {
+            texture:   &self.board_bindings.video_frame,
+            mip_level: 0,
+            origin:    wgpu::Origin3d
+            {
+               x: 0,
+               y: 0,
+               z: 0
+            },
+            aspect: wgpu::TextureAspect::All
+        },
+        wgpu::ImageCopyBuffer
+        {
+            buffer: &video_frame_buffer,
+            layout: wgpu::ImageDataLayout
+            {
+               offset:         0,
+               bytes_per_row:  std::num::NonZeroU32::new(row_pitch as u32),
+               rows_per_image: std::num::NonZeroU32::new(video_frame_height)
+            }
+        },
+        wgpu::Extent3d
+        {
+            width:                 video_frame_width as u32,
+            height:                video_frame_height as u32,
+            depth_or_array_layers: 1
+        });
+
+        self.queue.submit(std::iter::once(encoder.finish()));
+
+        let video_frame_buffer_slice = video_frame_buffer.slice(..);
+        let video_frame_future       = Box::new(video_frame_buffer_slice.map_async(wgpu::MapMode::Read));
+
+        self.video_frame_request_queue.push_back(ImageCopyRequest
+        {
+            image_buffer:      video_frame_buffer,
+            buffer_map_future: video_frame_future,
+            row_pitch
+        });
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    pub fn check_save_png_request(&mut self) -> Result<ImageBufferData, String>
     {
         if let None = &self.save_png_request
         {
@@ -1434,8 +1532,8 @@ impl StafraState
 
         let unwrapped_request = &mut self.save_png_request.as_mut().unwrap();
 
-        let save_png_buffer = &unwrapped_request.save_png_buffer;
-        let save_png_future = &mut unwrapped_request.save_png_future;
+        let save_png_buffer = &unwrapped_request.image_buffer;
+        let save_png_future = &mut unwrapped_request.buffer_map_future;
         let row_pitch       = unwrapped_request.row_pitch;
 
         let waker       = dummy_waker::dummy_waker();
@@ -1500,8 +1598,72 @@ impl StafraState
                 save_png_buffer.unmap();
 
                 self.save_png_request = None;
+                Ok(ImageBufferData
+                {
+                    pixel_data: image_array,
+                    width:      padded_width,
+                    height:     padded_height,
+                    row_pitch:  row_pitch as u32
+                })
+            }
 
-                Ok((image_array, self.board_bindings.board_width, self.board_bindings.board_height, padded_width))
+            std::task::Poll::Pending => Err("Pending".to_string())
+        }
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    pub fn grab_video_frame(&mut self) -> Result<ImageBufferData, String>
+    {
+        if self.video_frame_request_queue.is_empty()
+        {
+            return Err("No buffer copies scheduled".to_string());
+        }
+
+        let video_frame_buffer_request = self.video_frame_request_queue.front_mut().unwrap();
+        let video_frame_future         = video_frame_buffer_request.buffer_map_future.as_mut();
+
+        let waker       = dummy_waker::dummy_waker();
+        let mut context = Context::from_waker(&waker);
+
+        let pinned_future = Pin::new(video_frame_future);
+        match Future::poll(pinned_future, &mut context)
+        {
+            std::task::Poll::Ready(_) =>
+            {
+                let video_frame_request_data = self.video_frame_request_queue.pop_front().unwrap();
+
+                let video_frame_width  = 1024;
+                let video_frame_height = 1024;
+
+                let mut video_frame_image_array = vec![0u8; (video_frame_width * video_frame_height * 4) as usize];
+                {
+                    let video_frame_buffer_view = video_frame_request_data.image_buffer.slice(..).get_mapped_range();
+                    for (row_index, row_data) in video_frame_buffer_view.chunks(video_frame_request_data.row_pitch).enumerate()
+                    {
+                        for (column_index, texel_data) in row_data.chunks(4).enumerate()
+                        {
+                            if column_index >= video_frame_width
+                            {
+                                break; //Can be bigger than real width if row_pitch is big enough
+                            }
+
+                            let texel_data_start = (row_index * video_frame_width + column_index) * 4;
+                            video_frame_image_array[texel_data_start + 0] = texel_data[0];
+                            video_frame_image_array[texel_data_start + 1] = texel_data[1];
+                            video_frame_image_array[texel_data_start + 2] = texel_data[2];
+                            video_frame_image_array[texel_data_start + 3] = texel_data[3];
+                        }
+                    }
+                }
+
+                video_frame_request_data.image_buffer.unmap();
+                Ok(ImageBufferData
+                {
+                    pixel_data: video_frame_image_array,
+                    width:      video_frame_width as u32,
+                    height:     video_frame_height as u32,
+                    row_pitch:  video_frame_request_data.row_pitch as u32
+                })
             }
 
             std::task::Poll::Pending => Err("Pending".to_string())
@@ -1725,6 +1887,35 @@ impl StafraState
         click_rule_frame.present();
 
         Ok(())
+    }
+
+    fn render_video_frame(&mut self, encoder: &mut wgpu::CommandEncoder)
+    {
+        let video_frame_view = self.board_bindings.video_frame.create_view(&wgpu::TextureViewDescriptor::default());
+
+        let mut main_render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor
+        {
+            label: None,
+            color_attachments:
+            &[
+                wgpu::RenderPassColorAttachment
+                {
+                    view:           &video_frame_view,
+                    resolve_target: None,
+                    ops:            wgpu::Operations
+                    {
+                        load:  wgpu::LoadOp::Clear(wgpu::Color::GREEN),
+                        store: true,
+                    },
+                }
+            ],
+
+            depth_stencil_attachment: None,
+        });
+
+        main_render_pass.set_pipeline(&self.main_render_state_pipeline);
+        main_render_pass.set_bind_group(0, &self.board_bindings.main_render_state_bind_group, &[]);
+        main_render_pass.draw(0..3, 0..1);
     }
 
     fn calc_next_frame(&self, encoder: &mut wgpu::CommandEncoder)

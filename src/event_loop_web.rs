@@ -106,7 +106,7 @@ pub async fn run_event_loop()
 
 
     //Refresh handler
-    let app_state_clone_for_refresh = app_state_rc.clone();
+    let app_state_clone_for_refresh    = app_state_rc.clone();
     let stafra_state_clone_for_refresh = stafra_state_rc.clone();
 
     //Apparently the only way to detect canvas resize is to keep track of its size and compare it to the actual one each frame
@@ -124,35 +124,45 @@ pub async fn run_event_loop()
 
         let window = web_sys::window().unwrap();
 
-        //Update state
-        if app_state.run_state == RunState::Running || app_state.run_state == RunState::Recording
+        //Poll video frames
+        if app_state.run_state == RunState::Recording || app_state.run_state == RunState::PausedRecording
         {
-            stafra_state.update();
-        }
-
-        if app_state.last_frame == stafra_state.frame_number()
-        {
-            if app_state.run_state == RunState::Recording
+            while let Ok(video_frame_data) = stafra_state.grab_video_frame()
             {
-                save_recording();
+                //update_video_data(video_frame_data);
             }
-
-            app_state.run_state = RunState::Paused;
-            update_ui(app_state.run_state);
         }
 
         //Poll PNG save request
-        match stafra_state.check_png_data_request()
+        if let Ok(image_buffer_data) = stafra_state.check_save_png_request()
         {
-            Ok((mut image_array, width, height, row_pitch)) =>
-            {
-                let image_data = web_sys::ImageData::new_with_u8_clamped_array(Clamped(image_array.as_mut_slice()), row_pitch).unwrap();
-                save_image_data(image_data, width, height);
-            },
+            let image_data = web_sys::ImageData::new_with_u8_clamped_array(Clamped(image_buffer_data.pixel_data.as_slice()), image_buffer_data.row_pitch).unwrap();
+            save_image_data(image_data, image_buffer_data.width, image_buffer_data.height);
+        }
 
-            Err(_) =>
+        if app_state.run_state == RunState::Running
+        {
+            stafra_state.update();
+        }
+        else if app_state.run_state == RunState::Recording && !stafra_state.video_frame_queue_full()
+        {
+            stafra_state.update();
+            stafra_state.post_video_frame_request();
+
+            if app_state.last_frame == stafra_state.frame_number()
             {
+                //schedule_save_video_when_finished();
             }
+        }
+        else if app_state.run_state == RunState::PausedRecording
+        {
+            update_next_frame_button_paused_recording(!stafra_state.video_frame_queue_full());
+        }
+
+        if app_state.last_frame == stafra_state.frame_number() && app_state.run_state != RunState::Paused
+        {
+            app_state.run_state = RunState::Paused;
+            update_ui(app_state.run_state);
         }
 
         //Update and resize surfaces
@@ -270,7 +280,7 @@ fn create_save_png_closure(stafra_state_rc: Rc<RefCell<stafra_state::StafraState
     Closure::wrap(Box::new(move ||
     {
         let mut stafra_state = stafra_state_rc.borrow_mut();
-        stafra_state.post_png_data_request();
+        stafra_state.post_save_png_request();
     })
     as Box<dyn Fn()>)
 }
@@ -293,6 +303,11 @@ fn create_play_pause_closure(app_state_rc: Rc<RefCell<app_state::AppState>>, sta
         };
 
         update_ui(app_state.run_state);
+        if app_state.run_state == RunState::PausedRecording
+        {
+            update_next_frame_button_paused_recording(!stafra_state.video_frame_queue_full());
+        }
+
     }) as Box<dyn Fn()>)
 }
 
@@ -334,10 +349,23 @@ fn create_next_frame_closure(app_state_rc: Rc<RefCell<app_state::AppState>>, sta
 {
     Closure::wrap(Box::new(move ||
     {
-        let     app_state    = app_state_rc.borrow();
+        let mut app_state    = app_state_rc.borrow_mut();
         let mut stafra_state = stafra_state_rc.borrow_mut();
 
-        if app_state.run_state != RunState::Running && app_state.run_state != RunState::Recording
+        if app_state.run_state == RunState::PausedRecording && !stafra_state.video_frame_queue_full()
+        {
+            stafra_state.update();
+            stafra_state.post_video_frame_request();
+
+            update_next_frame_button_paused_recording(!stafra_state.video_frame_queue_full());
+
+            if app_state.last_frame == stafra_state.frame_number()
+            {
+                //schedule_save_video_when_finished();
+                app_state.run_state = RunState::Paused;
+            }
+        }
+        else if app_state.run_state == RunState::Paused && app_state.run_state == RunState::Stopped
         {
             stafra_state.update();
         }
@@ -590,13 +618,21 @@ fn update_ui(run_state: RunState)
     }
 
     let next_frame_button = document.get_element_by_id("button_next_frame").unwrap().dyn_into::<web_sys::HtmlButtonElement>().unwrap();
-    next_frame_button.set_disabled(run_state == RunState::Running);
+    next_frame_button.set_disabled(run_state == RunState::Running || run_state == RunState::Recording || run_state == RunState::PausedRecording);
 
     let initial_board_select = document.get_element_by_id("initial_states").unwrap().dyn_into::<web_sys::HtmlSelectElement>().unwrap();
     initial_board_select.set_disabled(run_state != RunState::Stopped);
 
     let size_select = document.get_element_by_id("sizes").unwrap().dyn_into::<web_sys::HtmlSelectElement>().unwrap();
     size_select.set_disabled(run_state != RunState::Stopped);
+}
+
+fn update_next_frame_button_paused_recording(next_video_frame_available: bool)
+{
+    let document = web_sys::window().unwrap().document().unwrap();
+
+    let next_frame_button = document.get_element_by_id("button_next_frame").unwrap().dyn_into::<web_sys::HtmlButtonElement>().unwrap();
+    next_frame_button.set_disabled(!next_video_frame_available);
 }
 
 fn update_last_frame_with_size(new_size: u32, app_state: &mut app_state::AppState)
