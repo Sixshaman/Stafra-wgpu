@@ -1072,26 +1072,26 @@ impl StafraState
             present_mode: wgpu::PresentMode::Fifo
         });
 
-        let main_render_state_vs_module = device.create_shader_module(&wgpu::include_wgsl!("../target/shaders/render_state_vs.wgsl"));
-        let main_render_state_fs_module = device.create_shader_module(&wgpu::include_wgsl!("../target/shaders/render_state_fs.wgsl"));
+        let main_render_state_vs_module = device.create_shader_module(&wgpu::include_wgsl!("shaders/render/render_state_vs.wgsl"));
+        let main_render_state_fs_module = device.create_shader_module(&wgpu::include_wgsl!("shaders/render/render_state_fs.wgsl"));
 
-        let click_rule_render_state_vs_module = device.create_shader_module(&wgpu::include_wgsl!("../target/shaders/click_rule_render_state_vs.wgsl"));
-        let click_rule_render_state_fs_module = device.create_shader_module(&wgpu::include_wgsl!("../target/shaders/click_rule_render_state_fs.wgsl"));
+        let click_rule_render_state_vs_module = device.create_shader_module(&wgpu::include_wgsl!("shaders/render/click_rule_render_state_vs.wgsl"));
+        let click_rule_render_state_fs_module = device.create_shader_module(&wgpu::include_wgsl!("shaders/render/click_rule_render_state_fs.wgsl"));
 
-        let clear_4_corners_module = device.create_shader_module(&wgpu::include_wgsl!("../target/shaders/clear_4_corners.wgsl"));
-        let clear_4_sides_module   = device.create_shader_module(&wgpu::include_wgsl!("../target/shaders/clear_4_sides.wgsl"));
-        let clear_center_module    = device.create_shader_module(&wgpu::include_wgsl!("../target/shaders/clear_center.wgsl"));
+        let clear_4_corners_module = device.create_shader_module(&wgpu::include_wgsl!("shaders/clear_board/clear_4_corners.wgsl"));
+        let clear_4_sides_module   = device.create_shader_module(&wgpu::include_wgsl!("shaders/clear_board/clear_4_sides.wgsl"));
+        let clear_center_module    = device.create_shader_module(&wgpu::include_wgsl!("shaders/clear_board/clear_center.wgsl"));
 
-        let initial_state_transform_module = device.create_shader_module(&wgpu::include_wgsl!("../target/shaders/initial_state_transform.wgsl"));
+        let initial_state_transform_module = device.create_shader_module(&wgpu::include_wgsl!("shaders/state_transform/initial_state_transform.wgsl"));
 
-        let final_state_transform_module   = device.create_shader_module(&wgpu::include_wgsl!("../target/shaders/final_state_transform.wgsl"));
-        let clear_stability_module         = device.create_shader_module(&wgpu::include_wgsl!("../target/shaders/clear_stability.wgsl"));
+        let final_state_transform_module   = device.create_shader_module(&wgpu::include_wgsl!("shaders/state_transform/final_state_transform.wgsl"));
+        let clear_stability_module         = device.create_shader_module(&wgpu::include_wgsl!("shaders/state_transform/clear_stability.wgsl"));
 
-        let bake_click_rule_module = device.create_shader_module(&wgpu::include_wgsl!("../target/shaders/bake_click_rule.wgsl"));
+        let bake_click_rule_module = device.create_shader_module(&wgpu::include_wgsl!("shaders/click_rule/bake_click_rule.wgsl"));
 
-        let next_step_module = device.create_shader_module(&wgpu::include_wgsl!("../target/shaders/next_step.wgsl"));
+        let next_step_module = device.create_shader_module(&wgpu::include_wgsl!("shaders/next_step/next_step.wgsl"));
 
-        let generate_mip_module = device.create_shader_module(&wgpu::include_wgsl!("../target/shaders/final_state_generate_next_mip.wgsl"));
+        let generate_mip_module = device.create_shader_module(&wgpu::include_wgsl!("shaders/mip/final_state_generate_next_mip.wgsl"));
 
         let binding_layouts        = StafraBindingLayouts::new(&device);
         let click_rule_bindings    = StafraClickRuleBindings::new(&device, &binding_layouts);
