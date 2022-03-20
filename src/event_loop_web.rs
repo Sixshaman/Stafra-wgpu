@@ -134,17 +134,17 @@ pub async fn run_event_loop()
         //Poll video frames
         if video_record_state.recorded_frame_count < video_record_state.max_frame_count
         {
-            while let AcquireImageResult::AcquireSuccess{pixel_data, width, height, row_pitch} = stafra_state.grab_video_frame()
+            while let AcquireImageResult::AcquireSuccess{pixel_data, width, height} = stafra_state.grab_video_frame()
             {
-                video_record_state.add_video_frame(pixel_data, width, height, row_pitch);
+                video_record_state.add_video_frame(pixel_data, width, height);
             }
         }
 
         //Poll PNG save request
-        if let AcquireImageResult::AcquireSuccess{pixel_data, width, height, row_pitch} = stafra_state.check_save_png_request()
+        if let AcquireImageResult::AcquireSuccess{pixel_data, width, height} = stafra_state.check_save_png_request()
         {
-            let image_data = web_sys::ImageData::new_with_u8_clamped_array(Clamped(pixel_data.as_slice()), row_pitch).unwrap();
-            save_image_data(image_data, width, height);
+            let image_data = web_sys::ImageData::new_with_u8_clamped_array_and_sh(Clamped(pixel_data.as_slice()), width, height).unwrap();
+            save_image_data(image_data);
         }
 
         if video_record_state.max_frame_count != 0 && video_record_state.recorded_frame_count == video_record_state.max_frame_count
@@ -572,13 +572,13 @@ fn create_select_size_closure(app_state_rc: Rc<RefCell<app_state::AppState>>, st
     }) as Box<dyn Fn(web_sys::Event)>)
 }
 
-fn save_image_data(image_data: web_sys::ImageData, width: u32, height: u32)
+fn save_image_data(image_data: web_sys::ImageData)
 {
     let document = web_sys::window().unwrap().document().unwrap();
 
     let canvas = document.create_element("canvas").unwrap().dyn_into::<web_sys::HtmlCanvasElement>().unwrap();
-    canvas.set_width(width);
-    canvas.set_height(height);
+    canvas.set_width(image_data.width());
+    canvas.set_height(image_data.height());
 
     let canvas_context = canvas.get_context("2d").unwrap().unwrap().dyn_into::<web_sys::CanvasRenderingContext2d>().unwrap();
     canvas_context.put_image_data(&image_data, 0.0, 0.0).expect("Image data put error!");

@@ -28,7 +28,6 @@ pub enum AcquireImageResult
         pixel_data: Vec<u8>,
         width:      u32,
         height:     u32,
-        row_pitch:  u32
     }
 }
 
@@ -1567,35 +1566,35 @@ impl StafraState
                             }
 
                             //Decode the quad
-                            let topleft  = texel_bytes[0] as f32;
-                            let topright = texel_bytes[1] as f32;
-                            let botleft  = texel_bytes[2] as f32;
-                            let botright = texel_bytes[3] as f32;
+                            let top_left     = texel_bytes[0] as f32;
+                            let top_right    = texel_bytes[1] as f32;
+                            let bottom_left  = texel_bytes[2] as f32;
+                            let bottom_right = texel_bytes[3] as f32;
 
-                            let topleft_start  = (((real_row_index + 0) * padded_width + real_column_index + 0) * 4) as usize;
-                            let topright_start = (((real_row_index + 0) * padded_width + real_column_index + 1) * 4) as usize;
-                            let botleft_start  = (((real_row_index + 1) * padded_width + real_column_index + 0) * 4) as usize;
-                            let botright_start = (((real_row_index + 1) * padded_width + real_column_index + 1) * 4) as usize;
+                            let top_left_start     = (((real_row_index + 0) * padded_width + real_column_index + 0) * 4) as usize;
+                            let top_right_start    = (((real_row_index + 0) * padded_width + real_column_index + 1) * 4) as usize;
+                            let bottom_left_start  = (((real_row_index + 1) * padded_width + real_column_index + 0) * 4) as usize;
+                            let bottom_right_start = (((real_row_index + 1) * padded_width + real_column_index + 1) * 4) as usize;
 
-                            image_array[topleft_start + 0] = (topleft * 255.0) as u8; //Red
-                            image_array[topleft_start + 1] = 0u8;                     //Green
-                            image_array[topleft_start + 2] = (topleft * 255.0) as u8; //Blue
-                            image_array[topleft_start + 3] = 255u8;                   //Alpha
+                            image_array[top_left_start + 0] = (top_left * 255.0) as u8; //Red
+                            image_array[top_left_start + 1] = 0u8;                      //Green
+                            image_array[top_left_start + 2] = (top_left * 255.0) as u8; //Blue
+                            image_array[top_left_start + 3] = 255u8;                    //Alpha
 
-                            image_array[topright_start + 0] = (topright * 255.0) as u8; //Red
-                            image_array[topright_start + 1] = 0u8;                      //Green
-                            image_array[topright_start + 2] = (topright * 255.0) as u8; //Blue
-                            image_array[topright_start + 3] = 255u8;                    //Alpha
+                            image_array[top_right_start + 0] = (top_right * 255.0) as u8; //Red
+                            image_array[top_right_start + 1] = 0u8;                       //Green
+                            image_array[top_right_start + 2] = (top_right * 255.0) as u8; //Blue
+                            image_array[top_right_start + 3] = 255u8;                     //Alpha
 
-                            image_array[botleft_start + 0] = (botleft * 255.0) as u8; //Red
-                            image_array[botleft_start + 1] = 0u8;                     //Green
-                            image_array[botleft_start + 2] = (botleft * 255.0) as u8; //Blue
-                            image_array[botleft_start + 3] = 255u8;                   //Alpha
+                            image_array[bottom_left_start + 0] = (bottom_left * 255.0) as u8; //Red
+                            image_array[bottom_left_start + 1] = 0u8;                         //Green
+                            image_array[bottom_left_start + 2] = (bottom_left * 255.0) as u8; //Blue
+                            image_array[bottom_left_start + 3] = 255u8;                       //Alpha
 
-                            image_array[botright_start + 0] = (botright * 255.0) as u8; //Red
-                            image_array[botright_start + 1] = 0u8;                      //Green
-                            image_array[botright_start + 2] = (botright * 255.0) as u8; //Blue
-                            image_array[botright_start + 3] = 255u8;                    //Alpha
+                            image_array[bottom_right_start + 0] = (bottom_right * 255.0) as u8; //Red
+                            image_array[bottom_right_start + 1] = 0u8;                          //Green
+                            image_array[bottom_right_start + 2] = (bottom_right * 255.0) as u8; //Blue
+                            image_array[bottom_right_start + 3] = 255u8;                        //Alpha
                         }
                     }
                 }
@@ -1608,7 +1607,6 @@ impl StafraState
                     pixel_data: image_array,
                     width:      padded_width,
                     height:     padded_height,
-                    row_pitch:  row_pitch as u32
                 }
             }
 
@@ -1667,7 +1665,6 @@ impl StafraState
                     pixel_data: video_frame_image_array,
                     width:      video_frame_width as u32,
                     height:     video_frame_height as u32,
-                    row_pitch:  video_frame_request_data.row_pitch as u32
                 }
             }
 
