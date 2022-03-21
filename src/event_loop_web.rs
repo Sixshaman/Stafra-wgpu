@@ -132,7 +132,7 @@ pub async fn run_event_loop()
         let window = web_sys::window().unwrap();
 
         //Poll video frames
-        if video_record_state.recorded_frame_count < video_record_state.max_frame_count
+        if video_record_state.is_recording()
         {
             while let AcquireImageResult::AcquireSuccess{pixel_data, width, height} = stafra_state.grab_video_frame()
             {
@@ -147,7 +147,7 @@ pub async fn run_event_loop()
             save_image_data(image_data);
         }
 
-        if video_record_state.max_frame_count != 0 && video_record_state.recorded_frame_count == video_record_state.max_frame_count
+        if video_record_state.is_recording_finished()
         {
             video_record_state.save_video();
         }
@@ -163,7 +163,7 @@ pub async fn run_event_loop()
 
             if app_state.last_frame == stafra_state.frame_number()
             {
-                video_record_state.max_frame_count = stafra_state.frame_number();
+                video_record_state.stop_recording(stafra_state.frame_number());
             }
         }
         else if app_state.run_state == RunState::PausedRecording
@@ -335,16 +335,14 @@ fn create_stop_closure(app_state_rc: Rc<RefCell<app_state::AppState>>, stafra_st
         {
             RunState::Stopped =>
             {
-                video_record_state.recorded_frame_count = 0;
-                video_record_state.max_frame_count      = u32::MAX;
-
+                video_record_state.restart();
                 app_state.run_state = RunState::Recording;
             }
 
             RunState::Recording | RunState::PausedRecording =>
             {
-                video_record_state.max_frame_count = stafra_state.frame_number();
-                app_state.run_state                = RunState::Stopped;
+                video_record_state.stop_recording(stafra_state.frame_number());
+                app_state.run_state = RunState::Stopped;
 
                 stafra_state.reset_board_unchanged();
                 stafra_state.set_click_rule_read_only(false);
@@ -380,7 +378,7 @@ fn create_next_frame_closure(app_state_rc: Rc<RefCell<app_state::AppState>>, sta
 
             if app_state.last_frame == stafra_state.frame_number()
             {
-                video_record_state.max_frame_count = stafra_state.frame_number();
+                video_record_state.stop_recording(stafra_state.frame_number());
                 app_state.run_state = RunState::Paused;
             }
         }
