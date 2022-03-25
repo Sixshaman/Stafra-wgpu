@@ -6,23 +6,36 @@ version = "0.1.2"
 resolver = "2"
 
 [dependencies.wasm-bindgen]
-git = "https://github.com/rustwasm/wasm-bindgen.git"
+git = "https://github.com/Sixshaman/wasm-bindgen.git"
+branch = "constructor-fixes"
 
 [dependencies.web-sys]
-git = "https://github.com/rustwasm/wasm-bindgen.git"
-features = ["Document", "Navigator", "Node", "NodeList", "Gpu", "GpuAdapter", "GpuAddressMode", "GpuBindGroup", "GpuBindGroupDescriptor", "GpuBindGroupEntry", "GpuBindGroupLayout", "GpuBindGroupLayoutDescriptor", "GpuBindGroupLayoutEntry", "GpuBlendFactor", "GpuBlendOperation", "GpuBuffer", "GpuBufferBinding", "GpuBufferDescriptor", "GpuBufferUsage", "GpuCanvasContext", "GpuColorDict", "GpuColorWrite", "GpuCommandBuffer", "GpuCommandBufferDescriptor", "GpuCommandEncoder", "GpuCommandEncoderDescriptor", "GpuCompareFunction", "GpuCompilationInfo", "GpuCompilationMessage", "GpuCompilationMessageType", "GpuComputePassDescriptor", "GpuComputePassEncoder", "GpuComputePipeline", "GpuComputePipelineDescriptor", "GpuCullMode", "GpuDevice", "GpuDeviceDescriptor", "GpuDeviceLostInfo", "GpuErrorFilter", "GpuExtent3dDict", "GpuFeatureName", "GpuFilterMode", "GpuFrontFace", "GpuIndexFormat", "GpuLoadOp", "GpuMapMode", "GpuObjectDescriptorBase", "GpuOrigin2dDict", "GpuOrigin3dDict", "GpuOutOfMemoryError", "GpuPipelineDescriptorBase", "GpuPipelineLayout", "GpuPipelineLayoutDescriptor", "GpuPipelineStatisticName", "GpuPowerPreference", "GpuPrimitiveTopology", "GpuQuerySet", "GpuQuerySetDescriptor", "GpuQueryType", "GpuQueue", "GpuRenderBundle", "GpuRenderBundleDescriptor", "GpuRenderBundleEncoder", "GpuRenderBundleEncoderDescriptor", "GpuRenderPassDescriptor", "GpuRenderPassEncoder", "GpuRenderPipeline", "GpuRenderPipelineDescriptor", "GpuRequestAdapterOptions", "GpuSampler", "GpuSamplerDescriptor", "GpuShaderModule", "GpuShaderModuleDescriptor", "GpuShaderStage", "GpuStencilOperation", "GpuStoreOp", "GpuTexture", "GpuTextureAspect", "GpuTextureDescriptor", "GpuTextureDimension", "GpuTextureFormat", "GpuTextureUsage", "GpuTextureView", "GpuTextureViewDescriptor", "GpuTextureViewDimension", "GpuUncapturedErrorEvent", "GpuUncapturedErrorEventInit", "GpuValidationError", "GpuVertexFormat", "HtmlAnchorElement", "HtmlCanvasElement", "HtmlButtonElement", "HtmlSelectElement", "HtmlOptionElement", "HtmlOptionsCollection", "HtmlInputElement", "HtmlImageElement", "ImageData", "FileList", "File", "FileReader", "CanvasRenderingContext2d", "Window", "DomException", "VideoPixelFormat", "VideoFrame", "VideoFrameBufferInit", "VideoEncoder", "VideoEncoderInit", "VideoEncoderConfig", "EncodedVideoChunk", "EncodedVideoChunkMetadata"]
+git = "https://github.com/Sixshaman/wasm-bindgen.git"
+branch = "constructor-fixes"
+features = ["Document", "Window", "DomException",
+            "HtmlCanvasElement", "CanvasRenderingContext2d",
+            "HtmlAnchorElement", "HtmlImageElement", "HtmlButtonElement", "HtmlVideoElement",
+            "HtmlSelectElement", "HtmlOptionElement", "HtmlOptionsCollection", "HtmlInputElement",
+            "ImageData", "FileList", "File", "FileReader", "Url",
+            "VideoPixelFormat", "VideoFrame", "VideoFrameBufferInit",
+            "VideoEncoder", "VideoEncoderInit", "VideoEncoderConfig",
+            "EncodedVideoChunk", "EncodedVideoChunkMetadata", "HardwareAcceleration",
+            "MediaSource", "MediaStream", "MediaRecorder",
+            "SourceBuffer", "SourceBufferList"]
 
 [dependencies.js-sys]
-git = "https://github.com/rustwasm/wasm-bindgen.git"
+git = "https://github.com/Sixshaman/wasm-bindgen.git"
+branch = "constructor-fixes"
 
 [dependencies.wasm-bindgen-futures]
-git = "https://github.com/rustwasm/wasm-bindgen.git"
+git = "https://github.com/Sixshaman/wasm-bindgen.git"
+branch = "constructor-fixes"
 
 [dependencies]
 wgpu = {git = "https://github.com/Sixshaman/wgpu.git", branch = "compat"}
 winit = {git = "https://github.com/Sixshaman/winit.git", branch = "compat"}
 console_log = {git = "https://github.com/Sixshaman/console_log.git", branch = "compat"}
-console_error_panic_hook = { git = "https://github.com/Sixshaman/console_error_panic_hook.git", branch = "compat"}
+console_error_panic_hook = {git = "https://github.com/Sixshaman/console_error_panic_hook.git", branch = "compat"}
 image = "0.23.14"
 cgmath = "0.17"
 env_logger = "0.8.3"

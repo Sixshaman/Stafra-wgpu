@@ -147,11 +147,6 @@ pub async fn run_event_loop()
             save_image_data(image_data);
         }
 
-        if video_record_state.is_recording_finished()
-        {
-            video_record_state.save_video();
-        }
-
         if app_state.run_state == RunState::Running
         {
             stafra_state.update();
