@@ -2,7 +2,9 @@
 
 use wasm_bindgen::closure::Closure;
 use wasm_bindgen::JsCast;
+use web_sys::MediaSource;
 
+//MediaRecorder <- MediaStream
 //Records a video, using a chain: Raw frame data -> VideoFrame -> MediaSource -> HTMLVideoElement -> MediaRecorder
 pub struct VideoRecordState
 {
@@ -10,7 +12,7 @@ pub struct VideoRecordState
     max_frame_count:      u32,
 
     video_encoder:  web_sys::VideoEncoder,
-    media_recorder: web_sys::MediaRecorder
+    //media_recorder: web_sys::MediaRecorder
 }
 
 impl VideoRecordState
@@ -52,7 +54,7 @@ impl VideoRecordState
         let video_encoder_init = web_sys::VideoEncoderInit::new(chunk_output_callback.as_ref().unchecked_ref(), error_callback.as_ref().unchecked_ref());
         let video_encoder      = web_sys::VideoEncoder::new(&video_encoder_init).unwrap();
 
-        let media_recorder = web_sys::MediaRecorder::new_with_media_stream(&video_element.src_object().unwrap()).unwrap();
+        //let media_recorder = web_sys::MediaRecorder::new_with_media_stream(&video_element.src_object().unwrap()).unwrap();
 
         chunk_output_callback.forget();
         error_callback.forget();
@@ -64,7 +66,7 @@ impl VideoRecordState
             max_frame_count:      0,
 
             video_encoder,
-            media_recorder
+            //media_recorder
         }
     }
 
@@ -103,7 +105,7 @@ impl VideoRecordState
         record_config.hardware_acceleration(web_sys::HardwareAcceleration::PreferHardware);
 
         self.video_encoder.configure(&record_config);
-        self.media_recorder.start().unwrap();
+        //self.media_recorder.start().unwrap();
     }
 
     pub fn is_recording(&self) -> bool

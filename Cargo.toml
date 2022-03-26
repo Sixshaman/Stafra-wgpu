@@ -7,11 +7,9 @@ resolver = "2"
 
 [dependencies.wasm-bindgen]
 git = "https://github.com/Sixshaman/wasm-bindgen.git"
-branch = "constructor-fixes"
 
 [dependencies.web-sys]
 git = "https://github.com/Sixshaman/wasm-bindgen.git"
-branch = "constructor-fixes"
 features = ["Document", "Window", "DomException",
             "HtmlCanvasElement", "CanvasRenderingContext2d",
             "HtmlAnchorElement", "HtmlImageElement", "HtmlButtonElement", "HtmlVideoElement",
@@ -21,15 +19,14 @@ features = ["Document", "Window", "DomException",
             "VideoEncoder", "VideoEncoderInit", "VideoEncoderConfig",
             "EncodedVideoChunk", "EncodedVideoChunkMetadata", "HardwareAcceleration",
             "MediaSource", "MediaStream", "MediaRecorder",
-            "SourceBuffer", "SourceBufferList"]
+            "SourceBuffer", "SourceBufferList",
+            "VideoTrack", "VideoTrackList"]
 
 [dependencies.js-sys]
 git = "https://github.com/Sixshaman/wasm-bindgen.git"
-branch = "constructor-fixes"
 
 [dependencies.wasm-bindgen-futures]
 git = "https://github.com/Sixshaman/wasm-bindgen.git"
-branch = "constructor-fixes"
 
 [dependencies]
 wgpu = {git = "https://github.com/Sixshaman/wgpu.git", branch = "compat"}

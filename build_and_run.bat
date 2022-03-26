@@ -8,7 +8,7 @@ echo F|xcopy /Y /F "./src/stafra.html" "./static/stafra.html"
 echo F|xcopy /Y /F "./src/stafra.css"  "./static/stafra.css"
 
 cargo build --lib --target wasm32-unknown-unknown
-wasm-bindgen --target web --out-name stafra --out-dir static ./target/wasm32-unknown-unknown/release/stafra.wasm
+wasm-bindgen --target web --out-name stafra --out-dir static ./target/wasm32-unknown-unknown/debug/stafra.wasm
 
 cd static
 del .gitignore
