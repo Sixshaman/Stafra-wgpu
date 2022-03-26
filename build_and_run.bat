@@ -11,6 +11,9 @@ cargo build --lib --target wasm32-unknown-unknown
 wasm-bindgen --target web --out-name stafra --out-dir static ./target/wasm32-unknown-unknown/release/stafra.wasm
 
 cd static
+del .gitignore
+del README.md
+
 miniserve --index stafra.html
 
 set RUSTFLAGS=
