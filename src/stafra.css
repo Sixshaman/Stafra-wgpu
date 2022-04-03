@@ -59,8 +59,31 @@
 
 #last_frame_number
 {
-    width:       7em;
+    width:       6em;
+    margin-left: auto;
+}
+
+#spawn_period_div
+{
+    display:        flex;
+    flex-direction: row;
+    margin-top:     2em;
+}
+
+#spawn_period_control_div
+{
     margin-left: 1em;
+}
+
+#spawn_range
+{
+    width: 3em;
+}
+
+#spawn_number
+{
+    width: 2em;
+    padding: 0;
 }
 
 #initial_states

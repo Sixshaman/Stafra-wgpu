@@ -72,7 +72,25 @@
                 <div id="last_frame_checkbox_div">
                     <input type="checkbox" id="last_frame_checkbox"/>
                     <span id="last_frame_checkbox_label">Stop at frame: </span>
-                    <input type="number" id="last_frame_number" value="1023" min="1" disabled>
+                    <input type="number" id="last_frame_number" value="1023" min="1" disabled/>
+                </div>
+
+                <div id="spawn_period_div">
+                    <div id="spawn_period_checkbox_div">
+                        <input type="checkbox" id="spawn_checkbox"/>
+                        <span id="spawn_checkbox_label">Spawn: </span>
+                    </div>
+                    <div id="spawn_period_control_div">
+                        <button id="decrement_spawn" disabled>&minus;</button>
+                        <input type="range" id="spawn_range" min="1" max="255" step="1" value="8" disabled/>
+                        <button id="increment_spawn" disabled>&plus;</button>
+                        <input type="text" inputmode="numeric" id="spawn_number" value="8" disabled/>
+                    </div>
+                </div>
+
+                <div id="smooth_transform_div">
+                    <input type="checkbox" id="smooth_transform_checkbox"/>
+                    <span id="smooth_transform_label">Smooth transform</span>
                 </div>
 
                 <canvas id="click_rule_canvas" width="50" height="50"></canvas>
