@@ -11,16 +11,19 @@ git = "https://github.com/Sixshaman/wasm-bindgen.git"
 [dependencies.web-sys]
 git = "https://github.com/Sixshaman/wasm-bindgen.git"
 features = ["Document", "Window", "DomException",
-            "HtmlCanvasElement", "CanvasRenderingContext2d",
-            "HtmlAnchorElement", "HtmlImageElement", "HtmlButtonElement", "HtmlVideoElement",
+            "Event", "BlobEvent",
+            "Url", "FileReader", "FileList", "File",
+            "HtmlCanvasElement", "CanvasRenderingContext2d", "ImageData",
+            "HtmlImageElement", "HtmlVideoElement",
+            "HtmlAnchorElement", "HtmlButtonElement",
             "HtmlSelectElement", "HtmlOptionElement", "HtmlOptionsCollection", "HtmlInputElement",
-            "ImageData", "FileList", "File", "FileReader", "Url",
-            "VideoPixelFormat", "VideoFrame", "VideoFrameBufferInit",
-            "VideoEncoder", "VideoEncoderInit", "VideoEncoderConfig",
+            "VideoFrame", "VideoFrameBufferInit", "VideoPixelFormat",
             "EncodedVideoChunk", "EncodedVideoChunkMetadata", "HardwareAcceleration",
-            "MediaSource", "MediaStream", "MediaRecorder",
-            "SourceBuffer", "SourceBufferList",
-            "VideoTrack", "VideoTrackList"]
+            "VideoEncoder", "VideoEncoderInit", "VideoEncoderConfig", "VideoEncoderEncodeOptions",
+            "VideoDecoder", "VideoDecoderInit", "VideoDecoderConfig",
+            "MediaRecorder", "MediaRecorderOptions",
+            "MediaStream", "MediaStreamTrackGenerator", "MediaStreamTrackGeneratorInit",
+            "WritableStream", "WritableStreamDefaultWriter"]
 
 [dependencies.js-sys]
 git = "https://github.com/Sixshaman/wasm-bindgen.git"

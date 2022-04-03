@@ -1,131 +1,247 @@
 #![cfg(target_arch = "wasm32")]
 
+use std::cell::RefCell;
+use std::rc::Rc;
 use wasm_bindgen::closure::Closure;
-use wasm_bindgen::JsCast;
-use web_sys::MediaSource;
+use wasm_bindgen::{JsCast, JsValue};
 
-//MediaRecorder <- MediaStream
-//Records a video, using a chain: Raw frame data -> VideoFrame -> MediaSource -> HTMLVideoElement -> MediaRecorder
+struct FrameCounter
+{
+    sent_frame_count:     u32,
+    encoded_frame_count:  u32,
+    recorded_frame_count: u32,
+    max_frame_count:      u32
+}
+
+impl FrameCounter
+{
+    fn new() -> Self
+    {
+        Self
+        {
+            sent_frame_count:     0,
+            encoded_frame_count:  0,
+            recorded_frame_count: 0,
+            max_frame_count:      u32::MAX
+        }
+    }
+
+    fn reset(&mut self)
+    {
+        self.sent_frame_count     = 0;
+        self.encoded_frame_count  = 0;
+        self.recorded_frame_count = 0;
+        self.max_frame_count      = u32::MAX;
+    }
+}
+
+//Records a video, using a chain: Raw frame data -> VideoFrame -> VideoEncoder -> VideoDecoder -> MediaStreamTrackGenerator -> MediaRecorder
+//Converting to VideoFrame is necessary because MediaStreamTrackGenerator can only handle VideoFrame objects.
+//Piping the frame through VideoEncoder and VideoDecoder is necessary because MediaRecorder doesn't understand RGBA frames.
 pub struct VideoRecordState
 {
-    recorded_frame_count: u32,
-    max_frame_count:      u32,
-
+    frame_counter:  Rc<RefCell<FrameCounter>>,
+    media_recorder: Rc<RefCell<web_sys::MediaRecorder>>,
     video_encoder:  web_sys::VideoEncoder,
-    //media_recorder: web_sys::MediaRecorder
+
+    #[allow(dead_code)]
+    media_stream: web_sys::MediaStream
 }
 
 impl VideoRecordState
 {
     pub fn new() -> Self
     {
-        let media_source_open_callback = Closure::wrap(Box::new(move |event: web_sys::Event|
-        {
-            let media_source = event.target().unwrap().dyn_into::<web_sys::MediaSource>().unwrap();
-            media_source.add_source_buffer("video/mp4; codecs=\"avc1.4D401E\"").unwrap(); //H.264 Main profile with constraint flags "40" (?) and level "1E" (???)
+        let video_frame_width  = 1024;
+        let video_frame_height = 1024;
 
-        }) as Box<dyn Fn(web_sys::Event)>);
-
-        let media_source = web_sys::MediaSource::new().unwrap();
-        media_source.set_onsourceopen(Some(media_source_open_callback.as_ref().unchecked_ref()));
-
-        let document = web_sys::window().unwrap().document().unwrap();
-        let video_element = document.create_element("video").unwrap().dyn_into::<web_sys::HtmlVideoElement>().unwrap();
-
-        let media_source_url = web_sys::Url::create_object_url_with_source(&media_source).unwrap();
-        video_element.set_src(&media_source_url);
-
-        let chunk_output_callback = Closure::wrap(Box::new(move |video_chunk: web_sys::EncodedVideoChunk, _chunk_metadata: web_sys::EncodedVideoChunkMetadata|
-        {
-            let source_buffer_list = media_source.source_buffers();
-            if source_buffer_list.length() > 0
-            {
-                let mut encoded_chunk_buffer = vec![0u8; video_chunk.byte_length() as usize];
-                video_chunk.copy_to_with_u8_array(encoded_chunk_buffer.as_mut_slice());
-                source_buffer_list.get(0).unwrap().append_buffer_with_u8_array(encoded_chunk_buffer.as_mut_slice()).unwrap();
-            }
-        }) as Box<dyn Fn(web_sys::EncodedVideoChunk, web_sys::EncodedVideoChunkMetadata)>);
+        let frame_counter = Rc::new(RefCell::new(FrameCounter::new()));
 
         let error_callback = Closure::wrap(Box::new(move |exception: web_sys::DomException|
         {
-            web_sys::console::log_1(&format!("Video recording error: {}", exception.name()).into());
+            web_sys::console::log_1(&exception.to_string());
         }) as Box<dyn Fn(web_sys::DomException)>);
 
-        let video_encoder_init = web_sys::VideoEncoderInit::new(chunk_output_callback.as_ref().unchecked_ref(), error_callback.as_ref().unchecked_ref());
-        let video_encoder      = web_sys::VideoEncoder::new(&video_encoder_init).unwrap();
 
-        //let media_recorder = web_sys::MediaRecorder::new_with_media_stream(&video_element.src_object().unwrap()).unwrap();
+        //Create the stream
+        let media_stream_track_generator_init = web_sys::MediaStreamTrackGeneratorInit::new("video");
+        let media_stream_track_generator = web_sys::MediaStreamTrackGenerator::new(&media_stream_track_generator_init).unwrap();
 
+        let media_stream = web_sys::MediaStream::new().unwrap();
+        media_stream.add_track(&media_stream_track_generator);
+
+
+        //Create the recorder
+        let frame_counter_clone_for_stop = frame_counter.clone();
+        let data_available_callback = Closure::wrap(Box::new(move |event: web_sys::BlobEvent|
+        {
+            let mut frame_counter = frame_counter_clone_for_stop.borrow_mut();
+
+            let data_blob = event.data().unwrap();
+            let url       = web_sys::Url::create_object_url_with_blob(&data_blob).unwrap();
+
+            let document = web_sys::window().unwrap().document().unwrap();
+            let link = document.create_element("a").unwrap().dyn_into::<web_sys::HtmlAnchorElement>().unwrap();
+            link.set_href(&url);
+            link.set_download(&"Stability.webm");
+            link.click();
+
+            link.remove();
+
+            frame_counter.reset();
+
+        }) as Box<dyn Fn(web_sys::BlobEvent)>);
+
+        let mut media_recorder_options = web_sys::MediaRecorderOptions::new();
+        media_recorder_options.mime_type("video/webm;codecs=vp8");
+
+        let media_recorder = Rc::new(RefCell::new(web_sys::MediaRecorder::new_with_media_stream_and_media_recorder_options(&media_stream, &media_recorder_options).unwrap()));
+        media_recorder.borrow_mut().set_ondataavailable(Some(data_available_callback.as_ref().unchecked_ref()));
+
+
+        //Create the video decoder
+        let frame_counter_clone_for_write = frame_counter.clone();
+        let media_recorder_clone_for_write = media_recorder.clone();
+        let after_write_callback = Closure::wrap(Box::new(move |_js_value: JsValue|
+        {
+            //Pause the recorder after each frame, to record at constant FPS
+            let mut frame_counter = frame_counter_clone_for_write.borrow_mut();
+            let media_recorder = media_recorder_clone_for_write.borrow_mut();
+
+            frame_counter.recorded_frame_count += 1;
+
+            if frame_counter.recorded_frame_count >= frame_counter.max_frame_count
+            {
+                media_recorder.stop().expect("Exception: MediaRecorder stop error");
+            }
+            else
+            {
+                media_recorder.pause().expect("Exception: MediaRecorder pause error");
+            }
+
+        }) as Box<dyn FnMut(JsValue)>);
+
+        let timeout_write_callback = Closure::wrap(Box::new(move |_js_value: JsValue|
+        {
+            //Offset the time of pausing the recorder, to make the frame longer
+            let timeout_arguments = js_sys::Array::new();
+            let window            = web_sys::window().unwrap();
+
+            window.set_timeout_with_callback_and_timeout_and_arguments(&after_write_callback.as_ref().unchecked_ref(), 16, &timeout_arguments).unwrap();
+
+        }) as Box<dyn FnMut(JsValue)>);
+
+        let media_recorder_clone_for_decoder = media_recorder.clone();
+        let video_frame_output_callback = Closure::wrap(Box::new(move |video_frame: web_sys::VideoFrame|
+        {
+            let media_recorder = media_recorder_clone_for_decoder.borrow_mut();
+            media_recorder.resume().expect("Exception: MediaRecorder resume error");
+
+            #[allow(unused_must_use)]
+            {
+                let stream_writer = media_stream_track_generator.writable().get_writer();
+                stream_writer.write_with_chunk(&video_frame).then(&timeout_write_callback);
+                stream_writer.release_lock();
+            }
+
+        }) as Box<dyn Fn(web_sys::VideoFrame)>);
+
+        let video_decoder_init = web_sys::VideoDecoderInit::new(error_callback.as_ref().unchecked_ref(), video_frame_output_callback.as_ref().unchecked_ref());
+
+        let mut video_decoder_config = web_sys::VideoDecoderConfig::new("vp8");
+        video_decoder_config.coded_width(video_frame_width);
+        video_decoder_config.coded_height(video_frame_height);
+        video_decoder_config.display_aspect_width(video_frame_width);
+        video_decoder_config.display_aspect_height(video_frame_height);
+
+        let video_decoder = web_sys::VideoDecoder::new(&video_decoder_init).unwrap();
+        video_decoder.configure(&video_decoder_config);
+
+
+        //Create the encoder
+        let frame_counter_clone_for_encoder = frame_counter.clone();
+        let chunk_output_callback = Closure::wrap(Box::new(move |video_chunk: web_sys::EncodedVideoChunk|
+        {
+            let mut frame_counter = frame_counter_clone_for_encoder.borrow_mut();
+            video_decoder.decode(&video_chunk);
+
+            frame_counter.encoded_frame_count += 1;
+            if frame_counter.encoded_frame_count >= frame_counter.max_frame_count
+            {
+                #[allow(unused_must_use)]
+                {
+                    video_decoder.flush();
+                }
+            }
+
+        }) as Box<dyn Fn(web_sys::EncodedVideoChunk)>);
+
+        let video_encoder_init = web_sys::VideoEncoderInit::new(error_callback.as_ref().unchecked_ref(), chunk_output_callback.as_ref().unchecked_ref());
+
+        let mut video_encoder_config = web_sys::VideoEncoderConfig::new("vp8", video_frame_width, video_frame_height);
+        video_encoder_config.bitrate(1000000.0);
+        video_encoder_config.framerate(60.0);
+
+        let video_encoder = web_sys::VideoEncoder::new(&video_encoder_init).unwrap();
+        video_encoder.configure(&video_encoder_config);
+
+
+        data_available_callback.forget();
+        video_frame_output_callback.forget();
         chunk_output_callback.forget();
         error_callback.forget();
-        media_source_open_callback.forget();
 
         Self
         {
-            recorded_frame_count: 0,
-            max_frame_count:      0,
-
+            frame_counter,
+            media_recorder,
             video_encoder,
-            //media_recorder
+
+            media_stream
         }
     }
 
     pub fn add_video_frame(&mut self, mut pixel_data: Vec<u8>, width: u32, height: u32)
     {
-        let frame_duration  = 1000.0 / 60.0;
-        let frame_timestamp = self.recorded_frame_count as f64 * frame_duration;
+        let mut frame_counter = self.frame_counter.borrow_mut();
 
-        let mut video_frame_buffer_init = web_sys::VideoFrameBufferInit::new(width, height, web_sys::VideoPixelFormat::Rgba, frame_timestamp);
+        let frame_duration  = 1000000.0 / 60.0;
+        let frame_timestamp = frame_counter.sent_frame_count as f64 * frame_duration;
+
+        let mut video_frame_buffer_init = web_sys::VideoFrameBufferInit::new(height, width, web_sys::VideoPixelFormat::Rgba, frame_timestamp);
         video_frame_buffer_init.duration(frame_duration);
 
-        let video_frame = web_sys::VideoFrame::new_with_u8_array_and_video_frame_buffer_init(pixel_data.as_mut_slice(), &video_frame_buffer_init).unwrap();
-        self.video_encoder.encode(&video_frame);
+        let mut video_encoder_options = web_sys::VideoEncoderEncodeOptions::new();
+        video_encoder_options.key_frame(frame_counter.sent_frame_count % 120 == 0 || frame_counter.sent_frame_count == frame_counter.max_frame_count - 1);
 
-        self.recorded_frame_count += 1;
-        if self.recorded_frame_count == self.max_frame_count
+        let video_frame = web_sys::VideoFrame::new_with_u8_array_and_video_frame_buffer_init(pixel_data.as_mut_slice(), &video_frame_buffer_init).unwrap();
+        self.video_encoder.encode_with_options(&video_frame, &video_encoder_options);
+        video_frame.close();
+
+        frame_counter.sent_frame_count += 1;
+        if frame_counter.sent_frame_count >= frame_counter.max_frame_count
         {
-            self.save_video();
+            #[allow(unused_must_use)]
+            {
+                self.video_encoder.flush();
+            }
         }
+    }
+
+    pub fn pending(&self) -> bool
+    {
+        self.frame_counter.borrow().sent_frame_count > 0
     }
 
     pub fn restart(&mut self)
     {
-        self.recorded_frame_count = 0;
-        self.max_frame_count      = u32::MAX;
-
-        self.video_encoder.reset();
-
-        let video_frame_width  = 1024;
-        let video_frame_height = 1024;
-
-        let h264_string = "avc1.*";
-        let mut record_config = web_sys::VideoEncoderConfig::new(h264_string, video_frame_width, video_frame_height);
-        record_config.bitrate(40000.0);
-        record_config.framerate(16.6);
-        record_config.hardware_acceleration(web_sys::HardwareAcceleration::PreferHardware);
-
-        self.video_encoder.configure(&record_config);
-        //self.media_recorder.start().unwrap();
+        self.frame_counter.borrow_mut().reset();
+        self.media_recorder.borrow().start().unwrap();
     }
 
-    pub fn is_recording(&self) -> bool
+    pub fn set_frame_limit(&mut self, final_frame: u32)
     {
-        self.recorded_frame_count < self.max_frame_count
-    }
-
-    pub fn is_recording_finished(&self) -> bool
-    {
-        self.max_frame_count != 0 && self.recorded_frame_count >= self.max_frame_count
-    }
-
-    pub fn stop_recording(&mut self, final_frame: u32)
-    {
-        self.max_frame_count = final_frame;
-    }
-
-    fn save_video(&mut self)
-    {
-        self.recorded_frame_count = 0;
-        self.max_frame_count      = 0;
+        let mut frame_counter = self.frame_counter.borrow_mut();
+        frame_counter.max_frame_count = final_frame;
     }
 }

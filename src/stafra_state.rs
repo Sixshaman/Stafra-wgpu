@@ -682,7 +682,7 @@ impl StafraBoardBindings
             mip_level_count: 1,
             sample_count:    1,
             dimension:       wgpu::TextureDimension::D2,
-            format:          wgpu::TextureFormat::Rgba8Unorm,
+            format:          wgpu::TextureFormat::Bgra8Unorm,
             usage:           wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC
         };
 
@@ -1321,7 +1321,7 @@ impl StafraState
             entry_point: "main"
         });
 
-        let max_video_frame_requests = 5;
+        let max_video_frame_requests = 3;
         Self
         {
             main_surface,
@@ -1638,28 +1638,11 @@ impl StafraState
                 let video_frame_width  = 1024;
                 let video_frame_height = 1024;
 
-                let mut video_frame_image_array = vec![0u8; (video_frame_width * video_frame_height * 4) as usize];
-                {
-                    let video_frame_buffer_view = video_frame_request_data.image_buffer.slice(..).get_mapped_range();
-                    for (row_index, row_data) in video_frame_buffer_view.chunks(video_frame_request_data.row_pitch).enumerate()
-                    {
-                        for (column_index, texel_data) in row_data.chunks(4).enumerate()
-                        {
-                            if column_index >= video_frame_width
-                            {
-                                break; //Can be bigger than real width if row_pitch is big enough
-                            }
-
-                            let texel_data_start = (row_index * video_frame_width + column_index) * 4;
-                            video_frame_image_array[texel_data_start + 0] = texel_data[0];
-                            video_frame_image_array[texel_data_start + 1] = texel_data[1];
-                            video_frame_image_array[texel_data_start + 2] = texel_data[2];
-                            video_frame_image_array[texel_data_start + 3] = texel_data[3];
-                        }
-                    }
-                }
-
+                //Because video_frame_width is a multiple of 256, row pitch is equal to width * 4.
+                //We can copy the image contents directly to the buffer, which is MUCH faster
+                let video_frame_image_array = video_frame_request_data.image_buffer.slice(..).get_mapped_range().to_vec();
                 video_frame_request_data.image_buffer.unmap();
+
                 AcquireImageResult::AcquireSuccess
                 {
                     pixel_data: video_frame_image_array,
