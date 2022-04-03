@@ -75,6 +75,19 @@
                     <input type="number" id="last_frame_number" value="1023" min="1" disabled/>
                 </div>
 
+                <div id="spawn_period_div">
+                    <div id="spawn_period_checkbox_div">
+                        <input type="checkbox" id="spawn_checkbox"/>
+                        <span id="spawn_checkbox_label">Spawn: </span>
+                    </div>
+                    <div id="spawn_period_control_div">
+                        <button id="decrement_spawn" disabled>&minus;</button>
+                        <input type="range" id="spawn_range" min="1" max="255" step="1" value="8" disabled/>
+                        <button id="increment_spawn" disabled>&plus;</button>
+                        <input type="text" inputmode="numeric" id="spawn_number" value="8" disabled/>
+                    </div>
+                </div>
+
                 <canvas id="click_rule_canvas" width="50" height="50"></canvas>
 
                 <div id="grid_checkbox_div">
