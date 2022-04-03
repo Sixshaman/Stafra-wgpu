@@ -1,7 +1,8 @@
 #![cfg(not(target_arch = "wasm32"))]
 
-mod app_state;
-mod stafra_state;
+pub mod app_state;
+pub mod stafra_state;
+pub mod video_record_state;
 mod event_loop_native;
 
 fn main()

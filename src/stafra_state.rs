@@ -19,11 +19,23 @@ use
     std::pin::Pin
 };
 
-struct SavePngRequest
+pub enum AcquireImageResult
 {
-    save_png_buffer: wgpu::Buffer,
-    save_png_future: Box<dyn Future<Output = Result<(), wgpu::BufferAsyncError>> + Unpin>,
-    row_pitch:       usize
+    Pending,
+    NoImagesRequested,
+    AcquireSuccess
+    {
+        pixel_data: Vec<u8>,
+        width:      u32,
+        height:     u32,
+    }
+}
+
+struct ImageCopyRequest
+{
+    image_buffer:      wgpu::Buffer,
+    buffer_map_future: Box<dyn Future<Output = Result<(), wgpu::BufferAsyncError>> + Unpin>,
+    row_pitch:         usize
 }
 
 struct StafraBindingLayouts
@@ -88,7 +100,9 @@ struct StafraBoardBindings
     #[allow(dead_code)]
     next_stability:    wgpu::Texture,
     #[allow(dead_code)]
-    final_state:       wgpu::Texture
+    final_state:       wgpu::Texture,
+    #[allow(dead_code)]
+    video_frame:       wgpu::Texture
 }
 
 #[derive(Copy, Clone, PartialEq)]
@@ -128,8 +142,9 @@ pub struct StafraState
     next_step_pipeline:               wgpu::ComputePipeline,
     generate_mip_pipeline:            wgpu::ComputePipeline,
 
-    save_png_request: Option<SavePngRequest>,
-    last_reset_type:  ResetBoardType,
+    save_png_request:          Option<ImageCopyRequest>,
+    video_frame_request_queue: std::collections::vec_deque::VecDeque<ImageCopyRequest>,
+    last_reset_type:           ResetBoardType,
 
     binding_layouts:        StafraBindingLayouts,
     click_rule_bindings:    StafraClickRuleBindings,
@@ -655,11 +670,28 @@ impl StafraBoardBindings
             usage:           wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::STORAGE_BINDING | wgpu::TextureUsages::COPY_SRC
         };
 
+        let video_frame_texture_descriptor = wgpu::TextureDescriptor
+        {
+            label: None,
+            size:  wgpu::Extent3d
+            {
+                width:                 1024,
+                height:                1024,
+                depth_or_array_layers: 1
+            },
+            mip_level_count: 1,
+            sample_count:    1,
+            dimension:       wgpu::TextureDimension::D2,
+            format:          wgpu::TextureFormat::Bgra8Unorm,
+            usage:           wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC
+        };
+
         let current_board      = device.create_texture(&board_texture_descriptor);
         let next_board         = device.create_texture(&board_texture_descriptor);
         let current_stability  = device.create_texture(&board_texture_descriptor);
         let next_stability     = device.create_texture(&board_texture_descriptor);
         let final_state        = device.create_texture(&final_state_texture_descriptor);
+        let video_frame        = device.create_texture(&video_frame_texture_descriptor);
 
         let initial_state_view_descriptor = wgpu::TextureViewDescriptor
         {
@@ -962,7 +994,8 @@ impl StafraBoardBindings
             next_board,
             current_stability,
             next_stability,
-            final_state
+            final_state,
+            video_frame
         }
     }
 }
@@ -1039,26 +1072,26 @@ impl StafraState
             present_mode: wgpu::PresentMode::Fifo
         });
 
-        let main_render_state_vs_module = device.create_shader_module(&wgpu::include_wgsl!("../target/shaders/render_state_vs.wgsl"));
-        let main_render_state_fs_module = device.create_shader_module(&wgpu::include_wgsl!("../target/shaders/render_state_fs.wgsl"));
+        let main_render_state_vs_module = device.create_shader_module(&wgpu::include_wgsl!("shaders/render/render_state_vs.wgsl"));
+        let main_render_state_fs_module = device.create_shader_module(&wgpu::include_wgsl!("shaders/render/render_state_fs.wgsl"));
 
-        let click_rule_render_state_vs_module = device.create_shader_module(&wgpu::include_wgsl!("../target/shaders/click_rule_render_state_vs.wgsl"));
-        let click_rule_render_state_fs_module = device.create_shader_module(&wgpu::include_wgsl!("../target/shaders/click_rule_render_state_fs.wgsl"));
+        let click_rule_render_state_vs_module = device.create_shader_module(&wgpu::include_wgsl!("shaders/render/click_rule_render_state_vs.wgsl"));
+        let click_rule_render_state_fs_module = device.create_shader_module(&wgpu::include_wgsl!("shaders/render/click_rule_render_state_fs.wgsl"));
 
-        let clear_4_corners_module = device.create_shader_module(&wgpu::include_wgsl!("../target/shaders/clear_4_corners.wgsl"));
-        let clear_4_sides_module   = device.create_shader_module(&wgpu::include_wgsl!("../target/shaders/clear_4_sides.wgsl"));
-        let clear_center_module    = device.create_shader_module(&wgpu::include_wgsl!("../target/shaders/clear_center.wgsl"));
+        let clear_4_corners_module = device.create_shader_module(&wgpu::include_wgsl!("shaders/clear_board/clear_4_corners.wgsl"));
+        let clear_4_sides_module   = device.create_shader_module(&wgpu::include_wgsl!("shaders/clear_board/clear_4_sides.wgsl"));
+        let clear_center_module    = device.create_shader_module(&wgpu::include_wgsl!("shaders/clear_board/clear_center.wgsl"));
 
-        let initial_state_transform_module = device.create_shader_module(&wgpu::include_wgsl!("../target/shaders/initial_state_transform.wgsl"));
+        let initial_state_transform_module = device.create_shader_module(&wgpu::include_wgsl!("shaders/state_transform/initial_state_transform.wgsl"));
 
-        let final_state_transform_module   = device.create_shader_module(&wgpu::include_wgsl!("../target/shaders/final_state_transform.wgsl"));
-        let clear_stability_module         = device.create_shader_module(&wgpu::include_wgsl!("../target/shaders/clear_stability.wgsl"));
+        let final_state_transform_module   = device.create_shader_module(&wgpu::include_wgsl!("shaders/state_transform/final_state_transform.wgsl"));
+        let clear_stability_module         = device.create_shader_module(&wgpu::include_wgsl!("shaders/state_transform/clear_stability.wgsl"));
 
-        let bake_click_rule_module = device.create_shader_module(&wgpu::include_wgsl!("../target/shaders/bake_click_rule.wgsl"));
+        let bake_click_rule_module = device.create_shader_module(&wgpu::include_wgsl!("shaders/click_rule/bake_click_rule.wgsl"));
 
-        let next_step_module = device.create_shader_module(&wgpu::include_wgsl!("../target/shaders/next_step.wgsl"));
+        let next_step_module = device.create_shader_module(&wgpu::include_wgsl!("shaders/next_step/next_step.wgsl"));
 
-        let generate_mip_module = device.create_shader_module(&wgpu::include_wgsl!("../target/shaders/final_state_generate_next_mip.wgsl"));
+        let generate_mip_module = device.create_shader_module(&wgpu::include_wgsl!("shaders/mip/final_state_generate_next_mip.wgsl"));
 
         let binding_layouts        = StafraBindingLayouts::new(&device);
         let click_rule_bindings    = StafraClickRuleBindings::new(&device, &binding_layouts);
@@ -1288,6 +1321,7 @@ impl StafraState
             entry_point: "main"
         });
 
+        let max_video_frame_requests = 3;
         Self
         {
             main_surface,
@@ -1310,8 +1344,9 @@ impl StafraState
             clear_stability_pipeline,
             generate_mip_pipeline,
 
-            save_png_request: None,
-            last_reset_type:  ResetBoardType::Standard{reset_type: StandardResetBoardType::Corners},
+            save_png_request:          None,
+            video_frame_request_queue: std::collections::vec_deque::VecDeque::with_capacity(max_video_frame_requests),
+            last_reset_type:           ResetBoardType::Standard{reset_type: StandardResetBoardType::Corners},
 
             binding_layouts,
             click_rule_bindings,
@@ -1333,6 +1368,11 @@ impl StafraState
     pub fn frame_number(&self) -> u32
     {
         self.frame_number
+    }
+
+    pub fn video_frame_queue_full(&self) -> bool
+    {
+        self.video_frame_request_queue.len() == self.video_frame_request_queue.capacity()
     }
 
     pub fn resize(&mut self, new_width: u32, new_height: u32)
@@ -1360,7 +1400,7 @@ impl StafraState
     }
 
     #[cfg(target_arch = "wasm32")]
-    pub fn post_png_data_request(&mut self)
+    pub fn post_save_png_request(&mut self)
     {
         if let Some(_) = &self.save_png_request
         {
@@ -1416,26 +1456,88 @@ impl StafraState
         let save_png_buffer_slice = save_png_buffer.slice(..);
         let save_png_future       = Box::new(save_png_buffer_slice.map_async(wgpu::MapMode::Read));
 
-        self.save_png_request = Some(SavePngRequest
+        self.save_png_request = Some(ImageCopyRequest
         {
-            save_png_buffer,
-            save_png_future,
+            image_buffer:      save_png_buffer,
+            buffer_map_future: save_png_future,
             row_pitch
         })
     }
 
     #[cfg(target_arch = "wasm32")]
-    pub fn check_png_data_request(&mut self) -> Result<(Vec<u8>, u32, u32, u32), String>
+    pub fn post_video_frame_request(&mut self)
+    {
+        let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor{label: None});
+        self.render_video_frame(&mut encoder);
+
+        let video_frame_width  = 1024;
+        let video_frame_height = 1024;
+
+        let row_alignment = 256 as usize;
+        let row_pitch     = (video_frame_width * 4 + row_alignment - 1) & (!(row_alignment - 1));
+
+        let video_frame_buffer = self.device.create_buffer(&wgpu::BufferDescriptor
+        {
+            label:              None,
+            size:               (row_pitch * video_frame_height as usize) as u64,
+            usage:              wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false
+        });
+
+        encoder.copy_texture_to_buffer(wgpu::ImageCopyTexture
+        {
+            texture:   &self.board_bindings.video_frame,
+            mip_level: 0,
+            origin:    wgpu::Origin3d
+            {
+               x: 0,
+               y: 0,
+               z: 0
+            },
+            aspect: wgpu::TextureAspect::All
+        },
+        wgpu::ImageCopyBuffer
+        {
+            buffer: &video_frame_buffer,
+            layout: wgpu::ImageDataLayout
+            {
+               offset:         0,
+               bytes_per_row:  std::num::NonZeroU32::new(row_pitch as u32),
+               rows_per_image: std::num::NonZeroU32::new(video_frame_height)
+            }
+        },
+        wgpu::Extent3d
+        {
+            width:                 video_frame_width as u32,
+            height:                video_frame_height as u32,
+            depth_or_array_layers: 1
+        });
+
+        self.queue.submit(std::iter::once(encoder.finish()));
+
+        let video_frame_buffer_slice = video_frame_buffer.slice(..);
+        let video_frame_future       = Box::new(video_frame_buffer_slice.map_async(wgpu::MapMode::Read));
+
+        self.video_frame_request_queue.push_back(ImageCopyRequest
+        {
+            image_buffer:      video_frame_buffer,
+            buffer_map_future: video_frame_future,
+            row_pitch
+        });
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    pub fn check_save_png_request(&mut self) -> AcquireImageResult
     {
         if let None = &self.save_png_request
         {
-            return Err("Not requested".to_string());
+            return AcquireImageResult::NoImagesRequested;
         }
 
         let unwrapped_request = &mut self.save_png_request.as_mut().unwrap();
 
-        let save_png_buffer = &unwrapped_request.save_png_buffer;
-        let save_png_future = &mut unwrapped_request.save_png_future;
+        let save_png_buffer = &unwrapped_request.image_buffer;
+        let save_png_future = &mut unwrapped_request.buffer_map_future;
         let row_pitch       = unwrapped_request.row_pitch;
 
         let waker       = dummy_waker::dummy_waker();
@@ -1464,35 +1566,35 @@ impl StafraState
                             }
 
                             //Decode the quad
-                            let topleft  = texel_bytes[0] as f32;
-                            let topright = texel_bytes[1] as f32;
-                            let botleft  = texel_bytes[2] as f32;
-                            let botright = texel_bytes[3] as f32;
+                            let top_left     = texel_bytes[0] as f32;
+                            let top_right    = texel_bytes[1] as f32;
+                            let bottom_left  = texel_bytes[2] as f32;
+                            let bottom_right = texel_bytes[3] as f32;
 
-                            let topleft_start  = (((real_row_index + 0) * padded_width + real_column_index + 0) * 4) as usize;
-                            let topright_start = (((real_row_index + 0) * padded_width + real_column_index + 1) * 4) as usize;
-                            let botleft_start  = (((real_row_index + 1) * padded_width + real_column_index + 0) * 4) as usize;
-                            let botright_start = (((real_row_index + 1) * padded_width + real_column_index + 1) * 4) as usize;
+                            let top_left_start     = (((real_row_index + 0) * padded_width + real_column_index + 0) * 4) as usize;
+                            let top_right_start    = (((real_row_index + 0) * padded_width + real_column_index + 1) * 4) as usize;
+                            let bottom_left_start  = (((real_row_index + 1) * padded_width + real_column_index + 0) * 4) as usize;
+                            let bottom_right_start = (((real_row_index + 1) * padded_width + real_column_index + 1) * 4) as usize;
 
-                            image_array[topleft_start + 0] = (topleft * 255.0) as u8; //Red
-                            image_array[topleft_start + 1] = 0u8;                     //Green
-                            image_array[topleft_start + 2] = (topleft * 255.0) as u8; //Blue
-                            image_array[topleft_start + 3] = 255u8;                   //Alpha
+                            image_array[top_left_start + 0] = (top_left * 255.0) as u8; //Red
+                            image_array[top_left_start + 1] = 0u8;                      //Green
+                            image_array[top_left_start + 2] = (top_left * 255.0) as u8; //Blue
+                            image_array[top_left_start + 3] = 255u8;                    //Alpha
 
-                            image_array[topright_start + 0] = (topright * 255.0) as u8; //Red
-                            image_array[topright_start + 1] = 0u8;                      //Green
-                            image_array[topright_start + 2] = (topright * 255.0) as u8; //Blue
-                            image_array[topright_start + 3] = 255u8;                    //Alpha
+                            image_array[top_right_start + 0] = (top_right * 255.0) as u8; //Red
+                            image_array[top_right_start + 1] = 0u8;                       //Green
+                            image_array[top_right_start + 2] = (top_right * 255.0) as u8; //Blue
+                            image_array[top_right_start + 3] = 255u8;                     //Alpha
 
-                            image_array[botleft_start + 0] = (botleft * 255.0) as u8; //Red
-                            image_array[botleft_start + 1] = 0u8;                     //Green
-                            image_array[botleft_start + 2] = (botleft * 255.0) as u8; //Blue
-                            image_array[botleft_start + 3] = 255u8;                   //Alpha
+                            image_array[bottom_left_start + 0] = (bottom_left * 255.0) as u8; //Red
+                            image_array[bottom_left_start + 1] = 0u8;                         //Green
+                            image_array[bottom_left_start + 2] = (bottom_left * 255.0) as u8; //Blue
+                            image_array[bottom_left_start + 3] = 255u8;                       //Alpha
 
-                            image_array[botright_start + 0] = (botright * 255.0) as u8; //Red
-                            image_array[botright_start + 1] = 0u8;                      //Green
-                            image_array[botright_start + 2] = (botright * 255.0) as u8; //Blue
-                            image_array[botright_start + 3] = 255u8;                    //Alpha
+                            image_array[bottom_right_start + 0] = (bottom_right * 255.0) as u8; //Red
+                            image_array[bottom_right_start + 1] = 0u8;                          //Green
+                            image_array[bottom_right_start + 2] = (bottom_right * 255.0) as u8; //Blue
+                            image_array[bottom_right_start + 3] = 255u8;                        //Alpha
                         }
                     }
                 }
@@ -1500,11 +1602,56 @@ impl StafraState
                 save_png_buffer.unmap();
 
                 self.save_png_request = None;
-
-                Ok((image_array, self.board_bindings.board_width, self.board_bindings.board_height, padded_width))
+                AcquireImageResult::AcquireSuccess
+                {
+                    pixel_data: image_array,
+                    width:      padded_width,
+                    height:     padded_height,
+                }
             }
 
-            std::task::Poll::Pending => Err("Pending".to_string())
+            std::task::Poll::Pending => AcquireImageResult::Pending
+        }
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    pub fn grab_video_frame(&mut self) -> AcquireImageResult
+    {
+        if self.video_frame_request_queue.is_empty()
+        {
+            return AcquireImageResult::NoImagesRequested;
+        }
+
+        let video_frame_buffer_request = self.video_frame_request_queue.front_mut().unwrap();
+        let video_frame_future         = video_frame_buffer_request.buffer_map_future.as_mut();
+
+        let waker       = dummy_waker::dummy_waker();
+        let mut context = Context::from_waker(&waker);
+
+        let pinned_future = Pin::new(video_frame_future);
+        match Future::poll(pinned_future, &mut context)
+        {
+            std::task::Poll::Ready(_) =>
+            {
+                let video_frame_request_data = self.video_frame_request_queue.pop_front().unwrap();
+
+                let video_frame_width  = 1024;
+                let video_frame_height = 1024;
+
+                //Because video_frame_width is a multiple of 256, row pitch is equal to width * 4.
+                //We can copy the image contents directly to the buffer, which is MUCH faster
+                let video_frame_image_array = video_frame_request_data.image_buffer.slice(..).get_mapped_range().to_vec();
+                video_frame_request_data.image_buffer.unmap();
+
+                AcquireImageResult::AcquireSuccess
+                {
+                    pixel_data: video_frame_image_array,
+                    width:      video_frame_width as u32,
+                    height:     video_frame_height as u32,
+                }
+            }
+
+            std::task::Poll::Pending => AcquireImageResult::Pending
         }
     }
 
@@ -1725,6 +1872,35 @@ impl StafraState
         click_rule_frame.present();
 
         Ok(())
+    }
+
+    fn render_video_frame(&mut self, encoder: &mut wgpu::CommandEncoder)
+    {
+        let video_frame_view = self.board_bindings.video_frame.create_view(&wgpu::TextureViewDescriptor::default());
+
+        let mut main_render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor
+        {
+            label: None,
+            color_attachments:
+            &[
+                wgpu::RenderPassColorAttachment
+                {
+                    view:           &video_frame_view,
+                    resolve_target: None,
+                    ops:            wgpu::Operations
+                    {
+                        load:  wgpu::LoadOp::Clear(wgpu::Color::GREEN),
+                        store: true,
+                    },
+                }
+            ],
+
+            depth_stencil_attachment: None,
+        });
+
+        main_render_pass.set_pipeline(&self.main_render_state_pipeline);
+        main_render_pass.set_bind_group(0, &self.board_bindings.main_render_state_bind_group, &[]);
+        main_render_pass.draw(0..3, 0..1);
     }
 
     fn calc_next_frame(&self, encoder: &mut wgpu::CommandEncoder)
