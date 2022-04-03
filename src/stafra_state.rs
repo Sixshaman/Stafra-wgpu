@@ -318,7 +318,7 @@ impl StafraBindingLayouts
                     {
                         ty:                 wgpu::BufferBindingType::Uniform,
                         has_dynamic_offset: false,
-                        min_binding_size:   NonZeroU64::new(std::mem::size_of::<u32>() as u64)
+                        min_binding_size:   NonZeroU64::new(2 * std::mem::size_of::<u32>() as u64)
                     },
                     count: None
                 }
@@ -712,7 +712,7 @@ impl StafraBoardBindings
         let spawn_data_buffer_descriptor = wgpu::BufferDescriptor
         {
             label:              None,
-            size:               std::mem::size_of::<u32>() as u64,
+            size:               2 * std::mem::size_of::<u32>() as u64,
             usage:              wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false
         };
@@ -1841,6 +1841,11 @@ impl StafraState
     pub fn set_spawn_period(&mut self, spawn_period: u32)
     {
         self.queue.write_buffer(&self.board_bindings.spawn_data_buffer, 0, &spawn_period.to_le_bytes());
+    }
+
+    pub fn set_smooth_transform_enabled(&mut self, enable: bool)
+    {
+        self.queue.write_buffer(&self.board_bindings.spawn_data_buffer, std::mem::size_of::<u32>() as wgpu::BufferAddress, &(enable as u32).to_le_bytes());
     }
 
     pub fn update(&mut self)

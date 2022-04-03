@@ -38,6 +38,8 @@ pub async fn run_event_loop()
     let increment_spawn_button = document.get_element_by_id("increment_spawn").unwrap().dyn_into::<web_sys::HtmlButtonElement>().unwrap();
     let spawn_range            = document.get_element_by_id("spawn_range").unwrap().dyn_into::<web_sys::HtmlInputElement>().unwrap();
 
+    let smooth_transform_checkbox = document.get_element_by_id("smooth_transform_checkbox").unwrap().dyn_into::<web_sys::HtmlInputElement>().unwrap();
+
     let show_grid_checkbox = document.get_element_by_id("grid_checkbox").unwrap().dyn_into::<web_sys::HtmlInputElement>().unwrap();
 
     let initial_state_upload_input = document.get_element_by_id("board_input").unwrap().dyn_into::<web_sys::HtmlInputElement>().unwrap();
@@ -73,6 +75,7 @@ pub async fn run_event_loop()
     stafra_state.set_click_rule_read_only(true);
     stafra_state.set_click_rule_grid_enabled(false);
     stafra_state.set_spawn_period(u32::MAX);
+    stafra_state.set_smooth_transform_enabled(false);
 
 
     //Creating closures
@@ -87,10 +90,12 @@ pub async fn run_event_loop()
     let enable_last_frame_closure = create_enable_last_frame_closure(app_state_rc.clone(), video_record_state_rc.clone());
     let change_last_frame_closure = create_change_last_frame_closure(app_state_rc.clone(), video_record_state_rc.clone());
 
-    let enable_spawn_closure = create_enable_spawn_closure(stafra_state_rc.clone());
+    let enable_spawn_closure    = create_enable_spawn_closure(stafra_state_rc.clone());
     let decrement_spawn_closure = create_decrement_spawn_closure(stafra_state_rc.clone());
     let increment_spawn_closure = create_increment_spawn_closure(stafra_state_rc.clone());
-    let change_spawn_closure = create_change_spawn_closure(stafra_state_rc.clone());
+    let change_spawn_closure    = create_change_spawn_closure(stafra_state_rc.clone());
+
+    let smooth_transform_closure = create_change_smooth_transform_closure(stafra_state_rc.clone());
 
     let show_grid_closure = create_show_grid_closure(stafra_state_rc.clone());
 
@@ -116,6 +121,8 @@ pub async fn run_event_loop()
     decrement_spawn_button.set_onclick(Some(decrement_spawn_closure.as_ref().unchecked_ref()));
     increment_spawn_button.set_onclick(Some(increment_spawn_closure.as_ref().unchecked_ref()));
     spawn_range.set_oninput(Some(change_spawn_closure.as_ref().unchecked_ref()));
+
+    smooth_transform_checkbox.set_onclick(Some(smooth_transform_closure.as_ref().unchecked_ref()));
 
     show_grid_checkbox.set_onclick(Some(show_grid_closure.as_ref().unchecked_ref()));
 
@@ -248,6 +255,7 @@ pub async fn run_event_loop()
     decrement_spawn_closure.forget();
     increment_spawn_closure.forget();
     change_spawn_closure.forget();
+    smooth_transform_closure.forget();
     show_grid_closure.forget();
     initial_state_upload_input_closure.forget();
     select_initial_state_closure.forget();
@@ -438,16 +446,18 @@ fn create_enable_spawn_closure(stafra_state_rc: Rc<RefCell<stafra_state::StafraS
     {
         let mut stafra_state = stafra_state_rc.borrow_mut();
 
-        let document               = web_sys::window().unwrap().document().unwrap();
-        let spawn_decrement_button = document.get_element_by_id("decrement_spawn").unwrap().dyn_into::<web_sys::HtmlButtonElement>().unwrap();
-        let spawn_increment_button = document.get_element_by_id("increment_spawn").unwrap().dyn_into::<web_sys::HtmlButtonElement>().unwrap();
-        let spawn_slider           = document.get_element_by_id("spawn_range").unwrap().dyn_into::<web_sys::HtmlInputElement>().unwrap();
+        let document                  = web_sys::window().unwrap().document().unwrap();
+        let spawn_decrement_button    = document.get_element_by_id("decrement_spawn").unwrap().dyn_into::<web_sys::HtmlButtonElement>().unwrap();
+        let spawn_increment_button    = document.get_element_by_id("increment_spawn").unwrap().dyn_into::<web_sys::HtmlButtonElement>().unwrap();
+        let spawn_slider              = document.get_element_by_id("spawn_range").unwrap().dyn_into::<web_sys::HtmlInputElement>().unwrap();
+        let smooth_transform_checkbox = document.get_element_by_id("smooth_transform_checkbox").unwrap().dyn_into::<web_sys::HtmlInputElement>().unwrap();
 
         let spawn_checkbox = event.target().unwrap().dyn_into::<web_sys::HtmlInputElement>().unwrap();
 
         spawn_decrement_button.set_disabled(!spawn_checkbox.checked());
         spawn_increment_button.set_disabled(!spawn_checkbox.checked());
         spawn_slider.set_disabled(!spawn_checkbox.checked());
+        smooth_transform_checkbox.set_disabled(!spawn_checkbox.checked());
 
         if spawn_checkbox.checked()
         {
@@ -519,6 +529,17 @@ fn create_change_spawn_closure(stafra_state_rc: Rc<RefCell<stafra_state::StafraS
         spawn_period_input.set_value(&new_spawn_period.to_string());
         stafra_state.set_spawn_period(new_spawn_period);
 
+    }) as Box<dyn Fn(web_sys::Event)>)
+}
+
+fn create_change_smooth_transform_closure(stafra_state_rc: Rc<RefCell<stafra_state::StafraState>>) -> Closure<dyn Fn(web_sys::Event)>
+{
+    Closure::wrap(Box::new(move |event: web_sys::Event|
+    {
+        let mut stafra_state = stafra_state_rc.borrow_mut();
+
+        let smooth_transform_checkbox = event.target().unwrap().dyn_into::<web_sys::HtmlInputElement>().unwrap();
+        stafra_state.set_smooth_transform_enabled(smooth_transform_checkbox.checked());
     }) as Box<dyn Fn(web_sys::Event)>)
 }
 
@@ -772,6 +793,9 @@ fn update_ui(run_state: RunState)
 
     let spawn_slider = document.get_element_by_id("spawn_range").unwrap().dyn_into::<web_sys::HtmlInputElement>().unwrap();
     spawn_slider.set_disabled(run_state != RunState::Stopped || !spawn_checkbox.checked());
+
+    let smooth_transform_checkbox = document.get_element_by_id("smooth_transform_checkbox").unwrap().dyn_into::<web_sys::HtmlInputElement>().unwrap();
+    smooth_transform_checkbox.set_disabled(run_state != RunState::Stopped || !spawn_checkbox.checked());
 }
 
 fn update_next_frame_button_paused_recording(next_video_frame_available: bool)

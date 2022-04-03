@@ -314,7 +314,8 @@ fn main(@builtin(local_invocation_id) local_thread_id: vec3<u32>, @builtin(globa
     let prev_unstable = vec4<u32>(prev_stability_unpacked > vec4<u32>(0u, 0u, 0u, 0u));
     let next_stability_unpacked = state_changed_flags + state_unchanged_flags * (prev_stability_unpacked + prev_unstable);
 
-    let next_stability_quad = pack_quad(next_stability_unpacked);
+    let next_stability_clamped = clamp(next_stability_unpacked, vec4<u32>(0u), vec4<u32>(255u));
+    let next_stability_quad = pack_quad(next_stability_clamped);
 
     textureStore(next_board,     vec2<i32>(global_thread_id.xy), vec4<u32>(next_board_quad));
     textureStore(next_stability, vec2<i32>(global_thread_id.xy), vec4<u32>(next_stability_quad));
