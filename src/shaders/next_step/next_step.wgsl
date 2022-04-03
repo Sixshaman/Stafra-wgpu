@@ -32,8 +32,8 @@ let workgroup_threads_y = 8u;
 
 struct ClickRuleData
 {
-    header_packed:            vec4<u32>;
-    enabled_positions_packed: array<vec4<i32>, 512>; //click_rule_width * click_rule_height / 2
+    header_packed:            vec4<u32>,
+    enabled_positions_packed: array<vec4<i32>, 512> //click_rule_width * click_rule_height / 2
 };
 
 @group(0) @binding(0) var prev_board:     texture_2d<u32>;

@@ -3,10 +3,10 @@ let click_rule_height = 32u;
 
 struct ClickRuleData
 {
-    element_count:     atomic<u32>;
-    radius:            atomic<u32>;
-    padding:           vec2<u32>;
-    enabled_positions: array<vec2<i32>, 1024>; //click_rule_width * click_rule_height
+    element_count:     atomic<u32>,
+    radius:            atomic<u32>,
+    padding:           vec2<u32>,
+    enabled_positions: array<vec2<i32>, 1024> //click_rule_width * click_rule_height
 };
 
 @group(0) @binding(0) var                      click_rule_tex:  texture_2d<u32>;

@@ -1,7 +1,7 @@
 struct FsInput
 {
-    @builtin(position) clip_position: vec4<f32>;
-    @location(0)       texcoord:      vec2<f32>;
+    @builtin(position) clip_position: vec4<f32>,
+    @location(0)       texcoord:      vec2<f32>
 };
 
 let FlagDrawOverlay:     u32 = 0x01u;
@@ -9,7 +9,7 @@ let FlagChangesDisabled: u32 = 0x02u;
 
 struct ClickRuleFlags
 {
-    flags: u32;
+    flags: u32
 }
 
 @group(0) @binding(0) var          click_rule:       texture_2d<u32>;
@@ -59,7 +59,7 @@ fn main(fin: FsInput) -> @location(0) vec4<f32>
         let line_distance                 = min(straight_line_distance, diagonal_line_distance);
 
         let line_width  = 0.005;
-        let line_factor = 1.0 - smoothStep(line_width - line_distance, 0.0, line_width);
+        let line_factor = 1.0 - smoothstep(line_width - line_distance, 0.0, line_width);
 
         result_color = result_color + 0.25 * vec4<f32>(line_factor, line_factor, line_factor, 0.0);
     }

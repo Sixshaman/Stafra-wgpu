@@ -3,8 +3,8 @@
 
 struct FsInput
 {
-    @builtin(position) clip_position: vec4<f32>;
-    @location(0)       texcoord:      vec2<f32>;
+    @builtin(position) clip_position: vec4<f32>,
+    @location(0)       texcoord:      vec2<f32>
 };
 
 @stage(fragment)
