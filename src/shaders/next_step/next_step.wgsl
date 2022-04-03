@@ -46,6 +46,19 @@ struct ClickRuleData
 
 var<workgroup> shared_quad_states: array<u32, 576>; //(click_rule_data_width + workgroup_threads_x) * (click_rule_data_height + workgroup_threads_y)
 
+fn unpack_quad(packed_quad: u32) -> vec4<u32>
+{
+    return vec4<u32>((packed_quad >>  0u) & 0xffu, (packed_quad >>  8u) & 0xffu,
+                     (packed_quad >> 16u) & 0xffu, (packed_quad >> 24u) & 0xffu);
+}
+
+fn pack_quad(quad: vec4<u32>) -> u32
+{
+    let masked_quad = quad & vec4<u32>(0xffu, 0xffu, 0xffu, 0xffu);
+    return (masked_quad.x <<  0u) | (masked_quad.y <<  8u)
+         | (masked_quad.z << 16u) | (masked_quad.w << 24u);
+}
+
 fn calculate_quad_index(local_thread_id: vec2<u32>, quad_offset: vec2<i32>, extra_radius_quads: u32) -> u32
 {
     let quad_shared_state_width  = workgroup_threads_x + extra_radius_quads * 2u;
@@ -144,6 +157,13 @@ fn calculate_quad(local_thread_id: vec2<u32>, click_rule_offset: vec2<i32>, extr
     }
 }
 
+fn update_quad_state(local_id: vec2<u32>, global_id: vec2<u32>, block_offset: vec2<i32>, board_size: vec2<i32>, extra_radius_quads: u32)
+{
+    let extra_quad_state_index = calculate_quad_index(local_id, block_offset, extra_radius_quads);
+    let extra_quad_state = textureLoad(prev_board, vec2<i32>(global_id) + block_offset, 0).x;
+    shared_quad_states[extra_quad_state_index] = extra_quad_state & calculate_quad_mask(global_id, block_offset, board_size);
+}
+
 @stage(compute) @workgroup_size(8, 8)
 fn main(@builtin(local_invocation_id) local_thread_id: vec3<u32>, @builtin(global_invocation_id) global_thread_id: vec3<u32>)
 {
@@ -206,73 +226,49 @@ fn main(@builtin(local_invocation_id) local_thread_id: vec3<u32>, @builtin(globa
         if(in_blocks[0])
         {
             let block_offset: vec2<i32> = block_offsets[0];
-
-            let extra_quad_state_index = calculate_quad_index(local_thread_id.xy, block_offset, extra_radius_quads);
-            let extra_quad_state = textureLoad(prev_board, vec2<i32>(global_thread_id.xy) + block_offset, 0).x;
-            shared_quad_states[extra_quad_state_index] = extra_quad_state & calculate_quad_mask(global_thread_id.xy, block_offset, board_size);
+            update_quad_state(local_thread_id.xy, global_thread_id.xy, block_offset, board_size, extra_radius_quads);
         }
 
         if(in_blocks[1])
         {
             let block_offset: vec2<i32> = block_offsets[1];
-
-            let extra_quad_state_index = calculate_quad_index(local_thread_id.xy, block_offset, extra_radius_quads);
-            let extra_quad_state = textureLoad(prev_board, vec2<i32>(global_thread_id.xy) + block_offset, 0).x;
-            shared_quad_states[extra_quad_state_index] = extra_quad_state & calculate_quad_mask(global_thread_id.xy, block_offset, board_size);
+            update_quad_state(local_thread_id.xy, global_thread_id.xy, block_offset, board_size, extra_radius_quads);
         }
 
         if(in_blocks[2])
         {
             let block_offset: vec2<i32> = block_offsets[2];
-
-            let extra_quad_state_index = calculate_quad_index(local_thread_id.xy, block_offset, extra_radius_quads);
-            let extra_quad_state = textureLoad(prev_board, vec2<i32>(global_thread_id.xy) + block_offset, 0).x;
-            shared_quad_states[extra_quad_state_index] = extra_quad_state & calculate_quad_mask(global_thread_id.xy, block_offset, board_size);
+            update_quad_state(local_thread_id.xy, global_thread_id.xy, block_offset, board_size, extra_radius_quads);
         }
 
         if(in_blocks[3])
         {
             let block_offset: vec2<i32> = block_offsets[3];
-
-            let extra_quad_state_index = calculate_quad_index(local_thread_id.xy, block_offset, extra_radius_quads);
-            let extra_quad_state = textureLoad(prev_board, vec2<i32>(global_thread_id.xy) + block_offset, 0).x;
-            shared_quad_states[extra_quad_state_index] = extra_quad_state & calculate_quad_mask(global_thread_id.xy, block_offset, board_size);
+            update_quad_state(local_thread_id.xy, global_thread_id.xy, block_offset, board_size, extra_radius_quads);
         }
 
         if(in_blocks[4])
         {
             let block_offset: vec2<i32> = block_offsets[4];
-
-            let extra_quad_state_index = calculate_quad_index(local_thread_id.xy, block_offset, extra_radius_quads);
-            let extra_quad_state = textureLoad(prev_board, vec2<i32>(global_thread_id.xy) + block_offset, 0).x;
-            shared_quad_states[extra_quad_state_index] = extra_quad_state & calculate_quad_mask(global_thread_id.xy, block_offset, board_size);
+            update_quad_state(local_thread_id.xy, global_thread_id.xy, block_offset, board_size, extra_radius_quads);
         }
 
         if(in_blocks[5])
         {
             let block_offset: vec2<i32> = block_offsets[5];
-
-            let extra_quad_state_index = calculate_quad_index(local_thread_id.xy, block_offset, extra_radius_quads);
-            let extra_quad_state = textureLoad(prev_board, vec2<i32>(global_thread_id.xy) + block_offset, 0).x;
-            shared_quad_states[extra_quad_state_index] = extra_quad_state & calculate_quad_mask(global_thread_id.xy, block_offset, board_size);
+            update_quad_state(local_thread_id.xy, global_thread_id.xy, block_offset, board_size, extra_radius_quads);
         }
 
         if(in_blocks[6])
         {
             let block_offset: vec2<i32> = block_offsets[6];
-
-            let extra_quad_state_index = calculate_quad_index(local_thread_id.xy, block_offset, extra_radius_quads);
-            let extra_quad_state = textureLoad(prev_board, vec2<i32>(global_thread_id.xy) + block_offset, 0).x;
-            shared_quad_states[extra_quad_state_index] = extra_quad_state & calculate_quad_mask(global_thread_id.xy, block_offset, board_size);
+            update_quad_state(local_thread_id.xy, global_thread_id.xy, block_offset, board_size, extra_radius_quads);
         }
 
         if(in_blocks[7])
         {
             let block_offset: vec2<i32> = block_offsets[7];
-
-            let extra_quad_state_index = calculate_quad_index(local_thread_id.xy, block_offset, extra_radius_quads);
-            let extra_quad_state = textureLoad(prev_board, vec2<i32>(global_thread_id.xy) + block_offset, 0).x;
-            shared_quad_states[extra_quad_state_index] = extra_quad_state & calculate_quad_mask(global_thread_id.xy, block_offset, board_size);
+            update_quad_state(local_thread_id.xy, global_thread_id.xy, block_offset, board_size, extra_radius_quads);
         }
     }
 
@@ -302,8 +298,23 @@ fn main(@builtin(local_invocation_id) local_thread_id: vec3<u32>, @builtin(globa
         next_board_quad = (next_board_quad + prev_board_quad) & modulo_2_mask;
     }
 
+    //Calculate new stability value: 0 for "stable", 1 for "unstable", 2 for "unstable for 1 frame", 3 for "unstable for 2 frames" and so on
+    //Prev state != next state => next stability = 1
+    //Prev state == next state and prev stability == 0 => next stability = 0
+    //Prev state == next state and prev stability != 0 => next stability += 1
+    let prev_board_unpacked = unpack_quad(prev_board_quad);
+    let next_board_unpacked = unpack_quad(next_board_quad);
+
     let prev_stability_quad: u32 = textureLoad(prev_stability, vec2<i32>(global_thread_id.xy), 0).x;
-    let next_stability_quad: u32 = (prev_stability_quad & ~(prev_board_quad ^ next_board_quad));
+    let prev_stability_unpacked = unpack_quad(prev_stability_quad);
+
+    let state_changed_flags   = vec4<u32>(prev_board_unpacked != next_board_unpacked);
+    let state_unchanged_flags = vec4<u32>(prev_board_unpacked == next_board_unpacked);
+
+    let prev_unstable = vec4<u32>(prev_stability_unpacked > vec4<u32>(0u, 0u, 0u, 0u));
+    let next_stability_unpacked = state_changed_flags + state_unchanged_flags * (prev_stability_unpacked + prev_unstable);
+
+    let next_stability_quad = pack_quad(next_stability_unpacked);
 
     textureStore(next_board,     vec2<i32>(global_thread_id.xy), vec4<u32>(next_board_quad));
     textureStore(next_stability, vec2<i32>(global_thread_id.xy), vec4<u32>(next_stability_quad));

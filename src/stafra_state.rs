@@ -102,7 +102,10 @@ struct StafraBoardBindings
     #[allow(dead_code)]
     final_state:       wgpu::Texture,
     #[allow(dead_code)]
-    video_frame:       wgpu::Texture
+    video_frame:       wgpu::Texture,
+
+    #[allow(dead_code)]
+    spawn_data_buffer: wgpu::Buffer
 }
 
 #[derive(Copy, Clone, PartialEq)]
@@ -303,6 +306,25 @@ impl StafraBindingLayouts
             }
         }
 
+        macro_rules! spawn_data_uniform_binding
+        {
+            ($bd:literal) =>
+            {
+                wgpu::BindGroupLayoutEntry
+                {
+                    binding:    $bd,
+                    visibility: wgpu::ShaderStages::COMPUTE,
+                    ty:         wgpu::BindingType::Buffer
+                    {
+                        ty:                 wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size:   NonZeroU64::new(std::mem::size_of::<u32>() as u64)
+                    },
+                    count: None
+                }
+            }
+        }
+
         macro_rules! click_rule_uniform_binding
         {
             ($bd:literal) =>
@@ -418,7 +440,8 @@ impl StafraBindingLayouts
             entries:
             &[
                 board_texture_binding!(0),
-                final_image_mip_binding!(1)
+                final_image_mip_binding!(1),
+                spawn_data_uniform_binding!(2)
             ]
         });
 
@@ -686,12 +709,22 @@ impl StafraBoardBindings
             usage:           wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC
         };
 
+        let spawn_data_buffer_descriptor = wgpu::BufferDescriptor
+        {
+            label:              None,
+            size:               std::mem::size_of::<u32>() as u64,
+            usage:              wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false
+        };
+
         let current_board      = device.create_texture(&board_texture_descriptor);
         let next_board         = device.create_texture(&board_texture_descriptor);
         let current_stability  = device.create_texture(&board_texture_descriptor);
         let next_stability     = device.create_texture(&board_texture_descriptor);
         let final_state        = device.create_texture(&final_state_texture_descriptor);
         let video_frame        = device.create_texture(&video_frame_texture_descriptor);
+
+        let spawn_data_buffer = device.create_buffer(&spawn_data_buffer_descriptor);
 
         let initial_state_view_descriptor = wgpu::TextureViewDescriptor
         {
@@ -898,6 +931,12 @@ impl StafraBoardBindings
                 {
                     binding:  1,
                     resource: wgpu::BindingResource::TextureView(&final_state_mip_views[0]),
+                },
+
+                wgpu::BindGroupEntry
+                {
+                    binding: 2,
+                    resource: wgpu::BindingResource::Buffer(spawn_data_buffer.as_entire_buffer_binding())
                 }
             ]
         });
@@ -918,6 +957,12 @@ impl StafraBoardBindings
                 {
                     binding:  1,
                     resource: wgpu::BindingResource::TextureView(&final_state_mip_views[0]),
+                },
+
+                wgpu::BindGroupEntry
+                {
+                    binding: 2,
+                    resource: wgpu::BindingResource::Buffer(spawn_data_buffer.as_entire_buffer_binding())
                 }
             ]
         });
@@ -995,7 +1040,9 @@ impl StafraBoardBindings
             current_stability,
             next_stability,
             final_state,
-            video_frame
+            video_frame,
+
+            spawn_data_buffer
         }
     }
 }
@@ -1789,6 +1836,11 @@ impl StafraState
         self.bake_click_rule(&mut encoder);
 
         self.queue.submit(std::iter::once(encoder.finish()));
+    }
+
+    pub fn set_spawn_period(&mut self, spawn_period: u32)
+    {
+        self.queue.write_buffer(&self.board_bindings.spawn_data_buffer, 0, &spawn_period.to_le_bytes());
     }
 
     pub fn update(&mut self)

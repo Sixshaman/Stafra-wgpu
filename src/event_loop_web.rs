@@ -67,6 +67,7 @@ pub async fn run_event_loop()
     stafra_state.reset_click_rule(&app_state.click_rule_data);
     stafra_state.set_click_rule_read_only(true);
     stafra_state.set_click_rule_grid_enabled(false);
+    stafra_state.set_spawn_period(u32::MAX);
 
 
     //Creating closures
