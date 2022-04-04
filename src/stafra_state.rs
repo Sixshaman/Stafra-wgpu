@@ -1788,6 +1788,16 @@ impl StafraState
         self.last_reset_type = ResetBoardType::Custom;
     }
 
+    pub fn upload_restriction(&mut self, image_array: Vec<u8>, width: u32, height: u32)
+    {
+
+    }
+
+    pub fn clear_restriction(&mut self)
+    {
+
+    }
+
     pub fn resize_board(&mut self, new_width: u32, new_height: u32)
     {
         let cropped_size = (min(new_width, new_height) + 2).next_power_of_two() / 2 - 1;

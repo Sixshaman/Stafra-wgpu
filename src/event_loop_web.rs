@@ -42,7 +42,11 @@ pub async fn run_event_loop()
 
     let show_grid_checkbox = document.get_element_by_id("grid_checkbox").unwrap().dyn_into::<web_sys::HtmlInputElement>().unwrap();
 
+    let upload_restriction_button = document.get_element_by_id("button_upload_restriction").unwrap().dyn_into::<web_sys::HtmlButtonElement>().unwrap();
+    let clear_restriction_button  = document.get_element_by_id("button_clear_restriction").unwrap().dyn_into::<web_sys::HtmlButtonElement>().unwrap();
+
     let initial_state_upload_input = document.get_element_by_id("board_input").unwrap().dyn_into::<web_sys::HtmlInputElement>().unwrap();
+    let restriction_upload_input   = document.get_element_by_id("restriction_input").unwrap().dyn_into::<web_sys::HtmlInputElement>().unwrap();
 
     let initial_state_select = document.get_element_by_id("initial_states").unwrap().dyn_into::<web_sys::HtmlSelectElement>().unwrap();
     let size_select          = document.get_element_by_id("sizes").unwrap().dyn_into::<web_sys::HtmlSelectElement>().unwrap();
@@ -76,6 +80,7 @@ pub async fn run_event_loop()
     stafra_state.set_click_rule_grid_enabled(false);
     stafra_state.set_spawn_period(u32::MAX);
     stafra_state.set_smooth_transform_enabled(false);
+    stafra_state.clear_restriction();
 
 
     //Creating closures
@@ -99,7 +104,11 @@ pub async fn run_event_loop()
 
     let show_grid_closure = create_show_grid_closure(stafra_state_rc.clone());
 
+    let upload_restriction_closure = create_upload_restriction_closure();
+    let clear_restriction_closure = create_clear_restriction_closure(stafra_state_rc.clone());
+
     let initial_state_upload_input_closure = create_board_upload_input_closure(app_state_rc.clone(), stafra_state_rc.clone());
+    let restriction_upload_input_closure   = create_upload_restriction_input_closure(stafra_state_rc.clone());
 
     let select_initial_state_closure = create_select_initial_state_closure(stafra_state_rc.clone());
     let select_size_closure          = create_select_size_closure(app_state_rc.clone(), stafra_state_rc.clone());
@@ -126,7 +135,11 @@ pub async fn run_event_loop()
 
     show_grid_checkbox.set_onclick(Some(show_grid_closure.as_ref().unchecked_ref()));
 
+    upload_restriction_button.set_onclick(Some(upload_restriction_closure.as_ref().unchecked_ref()));
+    clear_restriction_button.set_onclick(Some(clear_restriction_closure.as_ref().unchecked_ref()));
+
     initial_state_upload_input.set_onchange(Some(initial_state_upload_input_closure.as_ref().unchecked_ref()));
+    restriction_upload_input.set_onchange(Some(restriction_upload_input_closure.as_ref().unchecked_ref()));
 
     initial_state_select.set_onchange(Some(select_initial_state_closure.as_ref().unchecked_ref()));
     size_select.set_onchange(Some(select_size_closure.as_ref().unchecked_ref()));
@@ -257,7 +270,10 @@ pub async fn run_event_loop()
     change_spawn_closure.forget();
     smooth_transform_closure.forget();
     show_grid_closure.forget();
+    upload_restriction_closure.forget();
+    clear_restriction_closure.forget();
     initial_state_upload_input_closure.forget();
+    restriction_upload_input_closure.forget();
     select_initial_state_closure.forget();
     select_size_closure.forget();
 }
@@ -654,6 +670,85 @@ fn create_board_upload_input_closure(app_state_rc: Rc<RefCell<app_state::AppStat
     }) as Box<dyn Fn(web_sys::Event)>)
 }
 
+fn create_upload_restriction_closure() -> Closure<dyn Fn(web_sys::Event)>
+{
+    Closure::wrap(Box::new(move |_event: web_sys::Event|
+    {
+        let document = web_sys::window().unwrap().document().unwrap();
+        let restriction_upload_input = document.get_element_by_id("restriction_input").unwrap().dyn_into::<web_sys::HtmlInputElement>().unwrap();
+        restriction_upload_input.click();
+
+    }) as Box<dyn Fn(web_sys::Event)>)
+}
+
+fn create_upload_restriction_input_closure(stafra_state_rc: Rc<RefCell<stafra_state::StafraState>>) -> Closure<dyn Fn(web_sys::Event)>
+{
+    let restriction_upload_image_closure = Closure::wrap(Box::new(move |event: web_sys::Event|
+    {
+        let mut stafra_state = stafra_state_rc.borrow_mut();
+
+        let restriction_image = event.target().unwrap().dyn_into::<web_sys::HtmlImageElement>().unwrap();
+
+        let document           = web_sys::window().unwrap().document().unwrap();
+        let canvas_restriction = document.create_element("canvas").unwrap().dyn_into::<web_sys::HtmlCanvasElement>().unwrap();
+        let canvas_context     = canvas_restriction.get_context("2d").unwrap().unwrap().dyn_into::<web_sys::CanvasRenderingContext2d>().unwrap();
+
+        canvas_restriction.set_width(restriction_image.width());
+        canvas_restriction.set_height(restriction_image.height());
+
+        canvas_context.draw_image_with_html_image_element(&restriction_image, 0.0, 0.0).expect("Draw image error!");
+        let image_data = canvas_context.get_image_data(0.0, 0.0, restriction_image.width() as f64, restriction_image.height() as f64).unwrap();
+
+        stafra_state.upload_restriction(image_data.data().to_vec(), image_data.width(), image_data.height());
+
+        canvas_restriction.remove();
+
+        let clear_restriction_button = document.get_element_by_id("button_clear_restriction").unwrap().dyn_into::<web_sys::HtmlButtonElement>().unwrap();
+        clear_restriction_button.set_hidden(false);
+
+    }) as Box<dyn Fn(web_sys::Event)>);
+
+    let restriction_upload_image_element = web_sys::HtmlImageElement::new().unwrap();
+    restriction_upload_image_element.set_onload(Some(restriction_upload_image_closure.as_ref().unchecked_ref()));
+
+    let restriction_file_read_closure = Closure::wrap(Box::new(move |event: web_sys::Event|
+    {
+        let file_reader      = event.target().unwrap().dyn_into::<web_sys::FileReader>().unwrap();
+        let file_read_result = file_reader.result().unwrap();
+
+        let file_data = file_read_result.as_string().unwrap();
+        restriction_upload_image_element.set_src(&file_data);
+    }) as Box<dyn Fn(web_sys::Event)>);
+
+    let restriction_file_reader = web_sys::FileReader::new().unwrap();
+    restriction_file_reader.set_onload(Some(restriction_file_read_closure.as_ref().unchecked_ref()));
+
+    restriction_file_read_closure.forget();
+    restriction_upload_image_closure.forget();
+
+    Closure::wrap(Box::new(move |event: web_sys::Event|
+    {
+        let input_files = event.target().unwrap().dyn_into::<web_sys::HtmlInputElement>().unwrap().files().unwrap();
+        if input_files.length() > 0
+        {
+            let image_file = input_files.item(0).unwrap();
+            restriction_file_reader.read_as_data_url(&image_file).expect("Read data url error!");
+        }
+    }) as Box<dyn Fn(web_sys::Event)>)
+}
+
+fn create_clear_restriction_closure(stafra_state_rc: Rc<RefCell<stafra_state::StafraState>>) -> Closure<dyn Fn(web_sys::Event)>
+{
+    Closure::wrap(Box::new(move |event: web_sys::Event|
+    {
+        let mut stafra_state = stafra_state_rc.borrow_mut();
+        stafra_state.clear_restriction();
+
+        let clear_restriction_button = event.target().unwrap().dyn_into::<web_sys::HtmlButtonElement>().unwrap();
+        clear_restriction_button.set_hidden(true);
+    }) as Box<dyn Fn(web_sys::Event)>)
+}
+
 fn create_select_initial_state_closure(stafra_state_rc: Rc<RefCell<stafra_state::StafraState>>) -> Closure<dyn Fn(web_sys::Event)>
 {
     Closure::wrap(Box::new(move |event: web_sys::Event|
@@ -796,6 +891,12 @@ fn update_ui(run_state: RunState)
 
     let smooth_transform_checkbox = document.get_element_by_id("smooth_transform_checkbox").unwrap().dyn_into::<web_sys::HtmlInputElement>().unwrap();
     smooth_transform_checkbox.set_disabled(run_state != RunState::Stopped || !spawn_checkbox.checked());
+
+    let upload_restriction_button = document.get_element_by_id("button_upload_restriction").unwrap().dyn_into::<web_sys::HtmlButtonElement>().unwrap();
+    upload_restriction_button.set_disabled(run_state != RunState::Stopped);
+
+    let clear_restriction_button = document.get_element_by_id("button_clear_restriction").unwrap().dyn_into::<web_sys::HtmlButtonElement>().unwrap();
+    clear_restriction_button.set_disabled(run_state != RunState::Stopped);
 }
 
 fn update_next_frame_button_paused_recording(next_video_frame_available: bool)
