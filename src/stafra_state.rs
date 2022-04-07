@@ -2,7 +2,8 @@ use
 {
     futures::Future,
     std::num::{NonZeroU32, NonZeroU64},
-    std::cmp::min
+    std::cmp::min,
+    std::collections::vec_deque::VecDeque
 };
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -157,7 +158,7 @@ pub struct StafraState
     generate_mip_pipeline:                  wgpu::ComputePipeline,
 
     save_png_request:          Option<ImageCopyRequest>,
-    video_frame_request_queue: std::collections::vec_deque::VecDeque<ImageCopyRequest>,
+    video_frame_request_queue: VecDeque<ImageCopyRequest>,
     last_reset_type:           ResetBoardType,
 
     initial_restriction_tex: Option<wgpu::Texture>,
@@ -493,7 +494,7 @@ impl StafraBindingLayouts
             label: None,
             entries:
             &[
-                board_texture_binding!(0),
+                board_image_binding!(0),
             ]
         });
 
@@ -1319,7 +1320,7 @@ impl StafraState
         let clear_restriction_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor
         {
             label: None,
-            bind_group_layouts: &[&binding_layouts.clear_stability_bind_group_layout],
+            bind_group_layouts: &[&binding_layouts.clear_restriction_bind_group_layout],
             push_constant_ranges: &[],
         });
 
