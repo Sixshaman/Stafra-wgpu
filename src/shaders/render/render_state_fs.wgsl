@@ -25,8 +25,8 @@ fn main(fin: FsInput) -> @location(0) vec4<f32>
 	let min_lod = -1.0;
 	let max_lod = f32(textureNumLevels(board_tex) - 1);
 
-    let base_lod   = log2(max(d_texcoord_big.x, d_texcoord_big.y));
-    let lod        = clamp(base_lod, min_lod, max_lod);
+    let base_lod = log2(max(d_texcoord_big.x, d_texcoord_big.y));
+    let lod      = clamp(base_lod, min_lod, max_lod);
 
     let lerp_parameters: vec2<f32> = fract(texcoord_big);
 	if(lod < 0.0)

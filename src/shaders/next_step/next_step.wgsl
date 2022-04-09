@@ -42,7 +42,9 @@ struct ClickRuleData
 @group(0) @binding(2) var next_board:     texture_storage_2d<r32uint, write>;
 @group(0) @binding(3) var next_stability: texture_storage_2d<r32uint, write>;
 
-@group(0) @binding(4) var<uniform> click_rule_data: ClickRuleData;
+@group(0) @binding(4) var restriction: texture_2d<u32>;
+
+@group(0) @binding(5) var<uniform> click_rule_data: ClickRuleData;
 
 var<workgroup> shared_quad_states: array<u32, 576>; //(click_rule_data_width + workgroup_threads_x) * (click_rule_data_height + workgroup_threads_y)
 
@@ -294,9 +296,12 @@ fn main(@builtin(local_invocation_id) local_thread_id: vec3<u32>, @builtin(globa
     if((element_count % 2u) != 0u)
     {
         let last_offset: vec2<i32> = click_rule_data.enabled_positions_packed[packed_element_count].xy;
-        let prev_board_quad: u32 = calculate_quad(local_thread_id.xy, last_offset, extra_radius_quads);
-        next_board_quad = (next_board_quad + prev_board_quad) & modulo_2_mask;
+        let prev_board_quad_offset: u32 = calculate_quad(local_thread_id.xy, last_offset, extra_radius_quads);
+        next_board_quad = (next_board_quad + prev_board_quad_offset) & modulo_2_mask;
     }
+
+    let restriction_mask: u32 = textureLoad(restriction, vec2<i32>(global_thread_id.xy), 0).x;
+    next_board_quad = next_board_quad & restriction_mask;
 
     //Calculate new stability value: 0 for "stable", 1 for "unstable", 2 for "unstable for 1 frame", 3 for "unstable for 2 frames" and so on
     //Prev state != next state => next stability = 1
