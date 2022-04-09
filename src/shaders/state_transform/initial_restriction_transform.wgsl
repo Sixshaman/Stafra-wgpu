@@ -26,10 +26,15 @@ fn main(@builtin(global_invocation_id) global_thread_id: vec3<u32>)
     let bottom_left_quad_in_bounds:  bool = all(bottom_left_quad_coord  >= vec2(0, 0)) && all(bottom_left_quad_coord  < texture_size);
     let bottom_right_quad_in_bounds: bool = all(bottom_right_quad_coord >= vec2(0, 0)) && all(bottom_right_quad_coord < texture_size);
 
-	let top_left_quad:     vec4<f32> = textureLoad(restriction_tex, top_left_quad_coord,     0) * f32(top_left_quad_in_bounds);
-	let top_right_quad:    vec4<f32> = textureLoad(restriction_tex, top_right_quad_coord,    0) * f32(top_right_quad_in_bounds);
-	let bottom_left_quad:  vec4<f32> = textureLoad(restriction_tex, bottom_left_quad_coord,  0) * f32(bottom_left_quad_in_bounds);
-	let bottom_right_quad: vec4<f32> = textureLoad(restriction_tex, bottom_right_quad_coord, 0) * f32(bottom_right_quad_in_bounds);
+    let top_left_quad_out_of_bounds     = vec4<f32>(f32(!top_left_quad_in_bounds));
+    let top_right_quad_out_of_bounds    = vec4<f32>(f32(!top_right_quad_in_bounds));
+    let bottom_left_quad_out_of_bounds  = vec4<f32>(f32(!bottom_left_quad_in_bounds));
+    let bottom_right_quad_out_of_bounds = vec4<f32>(f32(!bottom_right_quad_in_bounds));
+
+	let top_left_quad:     vec4<f32> = textureLoad(restriction_tex, top_left_quad_coord,     0) * f32(top_left_quad_in_bounds)     + top_left_quad_out_of_bounds;
+	let top_right_quad:    vec4<f32> = textureLoad(restriction_tex, top_right_quad_coord,    0) * f32(top_right_quad_in_bounds)    + top_right_quad_out_of_bounds;
+	let bottom_left_quad:  vec4<f32> = textureLoad(restriction_tex, bottom_left_quad_coord,  0) * f32(bottom_left_quad_in_bounds)  + bottom_left_quad_out_of_bounds;
+	let bottom_right_quad: vec4<f32> = textureLoad(restriction_tex, bottom_right_quad_coord, 0) * f32(bottom_right_quad_in_bounds) + bottom_right_quad_out_of_bounds;
 
 	let state_color_matrix = mat4x4<f32>(top_left_quad, top_right_quad, bottom_left_quad, bottom_right_quad);
 	let quad_states        = vec4<u32>(lum_factor * state_color_matrix > vec4<f32>(0.15));

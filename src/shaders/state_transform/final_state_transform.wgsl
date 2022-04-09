@@ -19,7 +19,7 @@ fn main(@builtin(global_invocation_id) global_thread_id: vec3<u32>)
 	//Unpack the encoded quad
 	var final_stability_quad = vec4<u32>((final_stability_encoded >>  0u) & 0xffu, (final_stability_encoded >>  8u) & 0xffu,
 	                                     (final_stability_encoded >> 16u) & 0xffu, (final_stability_encoded >> 24u) & 0xffu);
-	                                     
+
     //0 -> spawn period, 1 -> 0, 2 -> 1, ...
     final_stability_quad = clamp(final_stability_quad - vec4<u32>(1u), vec4<u32>(0u), vec4<u32>(spawn_data.spawn_period));
     if(spawn_data.smooth_transform == 0u)
