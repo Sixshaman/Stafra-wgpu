@@ -10,9 +10,9 @@ git = "https://github.com/Sixshaman/wasm-bindgen.git"
 
 [dependencies.web-sys]
 git = "https://github.com/Sixshaman/wasm-bindgen.git"
-features = ["Document", "Window", "DomException",
+features = ["Document", "Window", "DomException", "Location", "History",
             "Event", "BlobEvent",
-            "Url", "FileReader", "FileList", "File",
+            "Url", "UrlSearchParams", "FileReader", "FileList", "File",
             "HtmlCanvasElement", "CanvasRenderingContext2d", "ImageData",
             "HtmlImageElement", "HtmlVideoElement",
             "HtmlAnchorElement", "HtmlButtonElement",

@@ -1992,7 +1992,7 @@ impl StafraState
         self.reset_board_unchanged();
     }
 
-    pub fn reset_click_rule(&mut self, click_rule_data: &[u32; 32 * 32])
+    pub fn reset_click_rule(&mut self, click_rule_data: &[u8; 32 * 32])
     {
         let click_rule_size = 32;
 
