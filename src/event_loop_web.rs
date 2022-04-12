@@ -3,7 +3,7 @@
 use
 {
     wasm_bindgen::closure::Closure,
-    wasm_bindgen::{JsCast, Clamped},
+    wasm_bindgen::{JsCast, JsValue, Clamped},
     std::rc::Rc,
     std::cell::RefCell
 };
@@ -14,6 +14,19 @@ use super::video_record_state;
 
 use crate::app_state::RunState;
 use crate::stafra_state::AcquireImageResult;
+
+struct QueryStringParams
+{
+    initial_state: stafra_state::StandardResetBoardType,
+    size_index:    u32,
+
+    final_frame: u32,
+
+    spawn:            u32,
+    smooth_transform: bool,
+
+    click_rule_data: app_state::ClickRuleInitData,
+}
 
 pub async fn run_event_loop()
 {
@@ -37,6 +50,7 @@ pub async fn run_event_loop()
     let decrement_spawn_button = document.get_element_by_id("decrement_spawn").unwrap().dyn_into::<web_sys::HtmlButtonElement>().unwrap();
     let increment_spawn_button = document.get_element_by_id("increment_spawn").unwrap().dyn_into::<web_sys::HtmlButtonElement>().unwrap();
     let spawn_range            = document.get_element_by_id("spawn_range").unwrap().dyn_into::<web_sys::HtmlInputElement>().unwrap();
+    let spawn_input            = document.get_element_by_id("spawn_number").unwrap().dyn_into::<web_sys::HtmlInputElement>().unwrap();
 
     let smooth_transform_checkbox = document.get_element_by_id("smooth_transform_checkbox").unwrap().dyn_into::<web_sys::HtmlInputElement>().unwrap();
 
@@ -53,34 +67,74 @@ pub async fn run_event_loop()
 
 
     //Apparently it's necessary to do it, width and height are not set up automatically
-    main_canvas.set_width((main_canvas.client_width()   as f64 * window.device_pixel_ratio()) as u32);
-    main_canvas.set_height((main_canvas.client_height() as f64 * window.device_pixel_ratio()) as u32);
+    main_canvas.set_width((main_canvas.client_width()               as f64 * window.device_pixel_ratio()) as u32);
+    main_canvas.set_height((main_canvas.client_height()             as f64 * window.device_pixel_ratio()) as u32);
     click_rule_canvas.set_width((click_rule_canvas.client_width()   as f64 * window.device_pixel_ratio()) as u32);
     click_rule_canvas.set_height((click_rule_canvas.client_height() as f64 * window.device_pixel_ratio()) as u32);
 
 
+    //Reading query string data
+    let state_params = parse_query_string(window.location().search().unwrap().as_str());
+    let board_size = app_state::AppState::board_size_from_index(state_params.size_index);
+
+    initial_state_select.set_value(match state_params.initial_state
+    {
+        stafra_state::StandardResetBoardType::Corners => "initial_state_corners",
+        stafra_state::StandardResetBoardType::Edges   => "initial_state_sides",
+        stafra_state::StandardResetBoardType::Center  => "initial_state_center"
+    });
+
+    size_select.set_selected_index(state_params.size_index as i32);
+
+    if state_params.final_frame != u32::MAX
+    {
+        last_frame_checkbox.set_checked(true);
+        last_frame_input.set_value_as_number(state_params.final_frame as f64);
+    }
+    else
+    {
+        last_frame_checkbox.set_checked(false);
+        last_frame_input.set_value_as_number((board_size / 2) as f64);
+    }
+
+    if state_params.spawn != u32::MAX
+    {
+        spawn_checkbox.set_checked(true);
+        smooth_transform_checkbox.set_checked(state_params.smooth_transform);
+
+        spawn_range.set_value_as_number(state_params.spawn as f64);
+        spawn_input.set_value(&state_params.spawn.to_string());
+    }
+    else
+    {
+        spawn_checkbox.set_checked(false);
+        smooth_transform_checkbox.set_checked(false);
+
+        spawn_range.set_value_as_number(8 as f64);
+        spawn_input.set_value("8");
+    }
+
+
     //Initializing the state
-    let board_size_selected_index = size_select.selected_index() as u32;
-
-    let initial_width  = app_state::AppState::board_size_from_index(board_size_selected_index);
-    let initial_height = app_state::AppState::board_size_from_index(board_size_selected_index);
-
-    let app_state_rc          = Rc::new(RefCell::new(app_state::AppState::new()));
-    let stafra_state_rc       = Rc::new(RefCell::new(stafra_state::StafraState::new_web(&main_canvas, &click_rule_canvas, initial_width, initial_height).await));
+    let app_state_rc          = Rc::new(RefCell::new(app_state::AppState::new(state_params.click_rule_data, state_params.final_frame)));
+    let stafra_state_rc       = Rc::new(RefCell::new(stafra_state::StafraState::new_web(&main_canvas, &click_rule_canvas, board_size, board_size).await));
     let video_record_state_rc = Rc::new(RefCell::new(video_record_state::VideoRecordState::new()));
 
     let mut app_state    = app_state_rc.borrow_mut();
     let mut stafra_state = stafra_state_rc.borrow_mut();
 
-    app_state.run_state = RunState::Running;
-
-    stafra_state.reset_board_standard(stafra_state::StandardResetBoardType::Corners);
+    stafra_state.reset_board_standard(state_params.initial_state);
     stafra_state.reset_click_rule(&app_state.click_rule_data);
+    stafra_state.set_spawn_period(state_params.spawn);
+    stafra_state.set_smooth_transform_enabled(state_params.smooth_transform);
+    stafra_state.clear_restriction();
+
+
+    //Start
+    app_state.run_state  = RunState::Running;
+
     stafra_state.set_click_rule_read_only(true);
     stafra_state.set_click_rule_grid_enabled(false);
-    stafra_state.set_spawn_period(u32::MAX);
-    stafra_state.set_smooth_transform_enabled(false);
-    stafra_state.clear_restriction();
 
 
     //Creating closures
@@ -251,7 +305,6 @@ pub async fn run_event_loop()
     }) as Box<dyn FnMut()>));
 
     update_ui(app_state.run_state);
-    update_last_frame_with_size(std::cmp::min(initial_width, initial_height), &mut app_state);
 
     window.request_animation_frame(refresh_function_copy.borrow().as_ref().unwrap().as_ref().unchecked_ref()).expect("Request animation frame error!");
 
@@ -287,6 +340,9 @@ fn create_click_rule_change_closure(app_state_rc: Rc<RefCell<app_state::AppState
 
         if app_state.run_state == RunState::Stopped
         {
+            let window       = web_sys::window().unwrap();
+            let query_string = web_sys::UrlSearchParams::new_with_str(window.location().search().unwrap().as_str()).unwrap();
+
             let mouse_event       = event.dyn_into::<web_sys::MouseEvent>().unwrap();
             let click_rule_canvas = mouse_event.target().unwrap().dyn_into::<web_sys::HtmlCanvasElement>().unwrap();
 
@@ -309,9 +365,13 @@ fn create_click_rule_change_closure(app_state_rc: Rc<RefCell<app_state::AppState
             let click_rule_index = (edit_index_y * click_rule_size + edit_index_x) as usize;
 
             let current_cell_state = app_state.click_rule_data[click_rule_index] != 0;
-            app_state.click_rule_data[click_rule_index] = (!current_cell_state) as u32;
+            app_state.click_rule_data[click_rule_index] = (!current_cell_state) as u8;
 
             stafra_state.reset_click_rule(&app_state.click_rule_data);
+            query_string.set("click_rule", &app_state.encode_click_rule_base64());
+
+            let new_search_state = window.location().pathname().unwrap() + "?" + &query_string.to_string().as_string().unwrap();
+            window.history().unwrap().replace_state_with_url(&wasm_bindgen::JsValue::NULL, "", Some(&new_search_state)).unwrap();
         }
     })
     as Box<dyn Fn(web_sys::Event)>)
@@ -427,6 +487,9 @@ fn create_enable_last_frame_closure(app_state_rc: Rc<RefCell<app_state::AppState
         let mut app_state          = app_state_rc.borrow_mut();
         let mut video_record_state = video_record_state_rc.borrow_mut();
 
+        let window = web_sys::window().unwrap();
+        let query_string = web_sys::UrlSearchParams::new_with_str(window.location().search().unwrap().as_str()).unwrap();
+
         let document         = web_sys::window().unwrap().document().unwrap();
         let last_frame_input = document.get_element_by_id("last_frame_number").unwrap().dyn_into::<web_sys::HtmlInputElement>().unwrap();
 
@@ -437,10 +500,12 @@ fn create_enable_last_frame_closure(app_state_rc: Rc<RefCell<app_state::AppState
             if !last_frame.is_nan()
             {
                 app_state.last_frame = last_frame as u32;
+                query_string.set("final_frame", &last_frame.to_string());
             }
             else
             {
                 app_state.last_frame = u32::MAX;
+                query_string.delete("final_frame");
             }
 
             last_frame_input.set_disabled(false);
@@ -449,7 +514,12 @@ fn create_enable_last_frame_closure(app_state_rc: Rc<RefCell<app_state::AppState
         {
             app_state.last_frame = u32::MAX;
             last_frame_input.set_disabled(true);
+
+            query_string.delete("final_frame");
         }
+
+        let new_search_state = window.location().pathname().unwrap() + "?" + &query_string.to_string().as_string().unwrap();
+        window.history().unwrap().replace_state_with_url(&wasm_bindgen::JsValue::NULL, "", Some(&new_search_state)).unwrap();
 
         video_record_state.set_frame_limit(app_state.last_frame);
 
@@ -462,7 +532,10 @@ fn create_enable_spawn_closure(stafra_state_rc: Rc<RefCell<stafra_state::StafraS
     {
         let mut stafra_state = stafra_state_rc.borrow_mut();
 
-        let document                  = web_sys::window().unwrap().document().unwrap();
+        let window       = web_sys::window().unwrap();
+        let query_string = web_sys::UrlSearchParams::new_with_str(window.location().search().unwrap().as_str()).unwrap();
+
+        let document                  = window.document().unwrap();
         let spawn_decrement_button    = document.get_element_by_id("decrement_spawn").unwrap().dyn_into::<web_sys::HtmlButtonElement>().unwrap();
         let spawn_increment_button    = document.get_element_by_id("increment_spawn").unwrap().dyn_into::<web_sys::HtmlButtonElement>().unwrap();
         let spawn_slider              = document.get_element_by_id("spawn_range").unwrap().dyn_into::<web_sys::HtmlInputElement>().unwrap();
@@ -481,11 +554,16 @@ fn create_enable_spawn_closure(stafra_state_rc: Rc<RefCell<stafra_state::StafraS
             let spawn_period = spawn_period_input.value().parse::<u32>().expect("Not a number");
 
             stafra_state.set_spawn_period(spawn_period);
+            query_string.set("spawn_period", &spawn_period.to_string());
         }
         else
         {
             stafra_state.set_spawn_period(u32::MAX);
+            query_string.delete("spawn_period");
         }
+
+        let new_search_state = window.location().pathname().unwrap() + "?" + &query_string.to_string().as_string().unwrap();
+        window.history().unwrap().replace_state_with_url(&wasm_bindgen::JsValue::NULL, "", Some(&new_search_state)).unwrap();
 
     }) as Box<dyn Fn(web_sys::Event)>)
 }
@@ -496,16 +574,25 @@ fn create_decrement_spawn_closure(stafra_state_rc: Rc<RefCell<stafra_state::Staf
     {
         let mut stafra_state = stafra_state_rc.borrow_mut();
 
-        let document = web_sys::window().unwrap().document().unwrap();
+        let window       = web_sys::window().unwrap();
+        let query_string = web_sys::UrlSearchParams::new_with_str(window.location().search().unwrap().as_str()).unwrap();
+
+        let document = window.document().unwrap();
         let spawn_period_input = document.get_element_by_id("spawn_number").unwrap().dyn_into::<web_sys::HtmlInputElement>().unwrap();
 
         let spawn_period_slider = document.get_element_by_id("spawn_range").unwrap().dyn_into::<web_sys::HtmlInputElement>().unwrap();
         let new_spawn_period = ((spawn_period_input.value().parse::<u32>().expect("Not a number")) - 1).clamp(1, 255);
 
-        spawn_period_input.set_value(&new_spawn_period.to_string());
-        spawn_period_slider.set_value(&new_spawn_period.to_string());
+        let spawn_period_string = new_spawn_period.to_string();
 
+        spawn_period_input.set_value(&spawn_period_string);
+        spawn_period_slider.set_value(&spawn_period_string);
+
+        query_string.set("spawn_period", &spawn_period_string);
         stafra_state.set_spawn_period(new_spawn_period);
+
+        let new_search_state = window.location().pathname().unwrap() + "?" + &query_string.to_string().as_string().unwrap();
+        window.history().unwrap().replace_state_with_url(&wasm_bindgen::JsValue::NULL, "", Some(&new_search_state)).unwrap();
 
     }) as Box<dyn Fn()>)
 }
@@ -516,27 +603,51 @@ fn create_increment_spawn_closure(stafra_state_rc: Rc<RefCell<stafra_state::Staf
     {
         let mut stafra_state = stafra_state_rc.borrow_mut();
 
-        let document = web_sys::window().unwrap().document().unwrap();
+        let window       = web_sys::window().unwrap();
+        let query_string = web_sys::UrlSearchParams::new_with_str(window.location().search().unwrap().as_str()).unwrap();
+
+        let document = window.document().unwrap();
         let spawn_period_input = document.get_element_by_id("spawn_number").unwrap().dyn_into::<web_sys::HtmlInputElement>().unwrap();
 
         let spawn_period_slider = document.get_element_by_id("spawn_range").unwrap().dyn_into::<web_sys::HtmlInputElement>().unwrap();
         let new_spawn_period = ((spawn_period_input.value().parse::<u32>().expect("Not a number")) + 1).clamp(1, 255);
 
-        spawn_period_input.set_value(&new_spawn_period.to_string());
-        spawn_period_slider.set_value(&new_spawn_period.to_string());
+        let spawn_period_string = new_spawn_period.to_string();
 
+        spawn_period_input.set_value(&spawn_period_string);
+        spawn_period_slider.set_value(&spawn_period_string);
+
+        query_string.set("spawn_period", &spawn_period_string);
         stafra_state.set_spawn_period(new_spawn_period);
+
+        let new_search_state = window.location().pathname().unwrap() + "?" + &query_string.to_string().as_string().unwrap();
+        window.history().unwrap().replace_state_with_url(&wasm_bindgen::JsValue::NULL, "", Some(&new_search_state)).unwrap();
 
     }) as Box<dyn Fn()>)
 }
 
 fn create_change_spawn_closure(stafra_state_rc: Rc<RefCell<stafra_state::StafraState>>) -> Closure<dyn Fn(web_sys::Event)>
 {
+    let spawn_query_string_timeout_closure = Closure::wrap(Box::new(move |spawn_value: &JsValue|
+    {
+        let window       = web_sys::window().unwrap();
+        let query_string = web_sys::UrlSearchParams::new_with_str(window.location().search().unwrap().as_str()).unwrap();
+
+        query_string.set("spawn_period", &spawn_value.as_string().unwrap());
+
+        let new_search_state = window.location().pathname().unwrap() + "?" + &query_string.to_string().as_string().unwrap();
+        window.history().unwrap().replace_state_with_url(&wasm_bindgen::JsValue::NULL, "", Some(&new_search_state)).unwrap();
+
+    }) as Box<dyn FnMut(&JsValue)>);
+
+    let timeout_update_arguments = js_sys::Array::new_with_length(1);
     Closure::wrap(Box::new(move |event: web_sys::Event|
     {
         let mut stafra_state = stafra_state_rc.borrow_mut();
 
-        let document = web_sys::window().unwrap().document().unwrap();
+        let window   = web_sys::window().unwrap();
+        let document = window.document().unwrap();
+
         let spawn_period_slider = event.target().unwrap().dyn_into::<web_sys::HtmlInputElement>().unwrap();
 
         let spawn_period_input = document.get_element_by_id("spawn_number").unwrap().dyn_into::<web_sys::HtmlInputElement>().unwrap();
@@ -544,6 +655,9 @@ fn create_change_spawn_closure(stafra_state_rc: Rc<RefCell<stafra_state::StafraS
 
         spawn_period_input.set_value(&new_spawn_period.to_string());
         stafra_state.set_spawn_period(new_spawn_period);
+
+        timeout_update_arguments.set(0, JsValue::from_str(&new_spawn_period.to_string()));
+        window.set_timeout_with_callback_and_timeout_and_arguments(&spawn_query_string_timeout_closure.as_ref().unchecked_ref(), 50, &timeout_update_arguments).unwrap();
 
     }) as Box<dyn Fn(web_sys::Event)>)
 }
@@ -554,8 +668,24 @@ fn create_change_smooth_transform_closure(stafra_state_rc: Rc<RefCell<stafra_sta
     {
         let mut stafra_state = stafra_state_rc.borrow_mut();
 
+        let window       = web_sys::window().unwrap();
+        let query_string = web_sys::UrlSearchParams::new_with_str(window.location().search().unwrap().as_str()).unwrap();
+
         let smooth_transform_checkbox = event.target().unwrap().dyn_into::<web_sys::HtmlInputElement>().unwrap();
         stafra_state.set_smooth_transform_enabled(smooth_transform_checkbox.checked());
+
+        if smooth_transform_checkbox.checked()
+        {
+            query_string.set("smooth_transform", "y");
+        }
+        else
+        {
+            query_string.delete("smooth_transform");
+        }
+
+        let new_search_state = window.location().pathname().unwrap() + "?" + &query_string.to_string().as_string().unwrap();
+        window.history().unwrap().replace_state_with_url(&wasm_bindgen::JsValue::NULL, "", Some(&new_search_state)).unwrap();
+
     }) as Box<dyn Fn(web_sys::Event)>)
 }
 
@@ -566,16 +696,24 @@ fn create_change_last_frame_closure(app_state_rc: Rc<RefCell<app_state::AppState
         let mut app_state          = app_state_rc.borrow_mut();
         let mut video_record_state = video_record_state_rc.borrow_mut();
 
+        let window = web_sys::window().unwrap();
+        let query_string = web_sys::UrlSearchParams::new_with_str(window.location().search().unwrap().as_str()).unwrap();
+
         let last_frame_input = event.target().unwrap().dyn_into::<web_sys::HtmlInputElement>().unwrap();
         let new_value = last_frame_input.value_as_number();
         if !new_value.is_nan()
         {
             app_state.last_frame = new_value as u32;
+            query_string.set("final_frame", &new_value.to_string());
         }
         else
         {
             app_state.last_frame = u32::MAX;
+            query_string.delete("final_frame");
         }
+
+        let new_search_state = window.location().pathname().unwrap() + "?" + &query_string.to_string().as_string().unwrap();
+        window.history().unwrap().replace_state_with_url(&wasm_bindgen::JsValue::NULL, "", Some(&new_search_state)).unwrap();
 
         video_record_state.set_frame_limit(app_state.last_frame);
 
@@ -755,22 +893,28 @@ fn create_select_initial_state_closure(stafra_state_rc: Rc<RefCell<stafra_state:
     {
         let mut stafra_state = stafra_state_rc.borrow_mut();
 
+        let window = web_sys::window().unwrap();
+        let query_string = web_sys::UrlSearchParams::new_with_str(window.location().search().unwrap().as_str()).unwrap();
+
         let board_reset_select = event.target().unwrap().dyn_into::<web_sys::HtmlSelectElement>().unwrap();
         match board_reset_select.value().as_str()
         {
             "initial_state_corners" =>
             {
                 stafra_state.reset_board_standard(stafra_state::StandardResetBoardType::Corners);
+                query_string.set("initial_state", "corners");
             },
 
             "initial_state_sides" =>
             {
                 stafra_state.reset_board_standard(stafra_state::StandardResetBoardType::Edges);
+                query_string.set("initial_state", "edges");
             },
 
             "initial_state_center" =>
             {
                 stafra_state.reset_board_standard(stafra_state::StandardResetBoardType::Center);
+                query_string.set("initial_state", "center");
             },
 
             "initial_state_custom" =>
@@ -778,10 +922,15 @@ fn create_select_initial_state_closure(stafra_state_rc: Rc<RefCell<stafra_state:
                 let document = web_sys::window().unwrap().document().unwrap();
                 let initial_state_upload_input = document.get_element_by_id("board_input").unwrap().dyn_into::<web_sys::HtmlInputElement>().unwrap();
                 initial_state_upload_input.click();
+
+                query_string.delete("initial_state");
             },
 
             _ => {}
         }
+
+        let new_search_state = window.location().pathname().unwrap() + "?" + &query_string.to_string().as_string().unwrap();
+        window.history().unwrap().replace_state_with_url(&wasm_bindgen::JsValue::NULL, "", Some(&new_search_state)).unwrap();
 
     }) as Box<dyn Fn(web_sys::Event)>)
 }
@@ -793,6 +942,9 @@ fn create_select_size_closure(app_state_rc: Rc<RefCell<app_state::AppState>>, st
         let mut app_state    = app_state_rc.borrow_mut();
         let mut stafra_state = stafra_state_rc.borrow_mut();
 
+        let window = web_sys::window().unwrap();
+        let query_string = web_sys::UrlSearchParams::new_with_str(window.location().search().unwrap().as_str()).unwrap();
+
         let size_select = event.target().unwrap().dyn_into::<web_sys::HtmlSelectElement>().unwrap();
         let board_size_selected_index = size_select.selected_index() as u32;
 
@@ -801,7 +953,82 @@ fn create_select_size_closure(app_state_rc: Rc<RefCell<app_state::AppState>>, st
 
         update_last_frame_with_size(std::cmp::min(new_width, new_height), &mut app_state);
         stafra_state.resize_board(new_width, new_height);
+
+        query_string.set("size_index", &board_size_selected_index.to_string());
+
+        let new_search_state = window.location().pathname().unwrap() + "?" + &query_string.to_string().as_string().unwrap();
+        window.history().unwrap().replace_state_with_url(&wasm_bindgen::JsValue::NULL, "", Some(&new_search_state)).unwrap();
+
     }) as Box<dyn Fn(web_sys::Event)>)
+}
+
+fn parse_query_string(query_string: &str) -> QueryStringParams
+{
+    let search_params = web_sys::UrlSearchParams::new_with_str(query_string).unwrap();
+
+    let initial_state = match search_params.get("initial_state")
+    {
+        Some(value) => match value.to_lowercase().as_str()
+        {
+            "corners"         => stafra_state::StandardResetBoardType::Corners,
+            "sides" | "edges" => stafra_state::StandardResetBoardType::Edges,
+            "center"          => stafra_state::StandardResetBoardType::Center,
+            _                 => stafra_state::StandardResetBoardType::Corners
+        }
+
+        None => stafra_state::StandardResetBoardType::Corners
+    };
+
+    let default_size_index = 9;  //Corresponds to 1023x1023
+    let minimum_size_index = 0;  //Corresponds to 1x1
+    let maximum_size_index = 13; //Corresponds to 16383x16383
+    let size_index = match search_params.get("size_index")
+    {
+        Some(value) => value.parse::<u32>().unwrap_or(default_size_index).clamp(minimum_size_index, maximum_size_index),
+        None        => default_size_index
+    };
+
+    let final_frame = match search_params.get("final_frame")
+    {
+        Some(value) => value.parse::<u32>().unwrap_or(u32::MAX).clamp(1, u32::MAX),
+        None        => u32::MAX
+    };
+
+    let spawn = match search_params.get("spawn_period")
+    {
+        Some(value) => value.parse::<u32>().unwrap_or(u32::MAX).clamp(1, 255),
+        None        => u32::MAX
+    };
+
+    let smooth_transform = match search_params.get("smooth_transform")
+    {
+        Some(value) => match value.to_lowercase().as_str()
+        {
+            "y" | "yes" | "1" | "true" => true,
+            _                          => false
+        }
+
+        None => false
+    };
+
+    let click_rule_data = match search_params.get("click_rule")
+    {
+        Some(value) => app_state::ClickRuleInitData::Custom(app_state::parse_click_rule_base64(value.as_str())),
+        None        => app_state::ClickRuleInitData::Default
+    };
+
+    QueryStringParams
+    {
+        initial_state,
+        size_index,
+
+        final_frame,
+
+        spawn,
+        smooth_transform,
+
+        click_rule_data
+    }
 }
 
 fn save_image_data(image_data: web_sys::ImageData)
