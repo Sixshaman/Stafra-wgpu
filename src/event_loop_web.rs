@@ -30,41 +30,11 @@ struct QueryStringParams
 
 pub async fn run_event_loop()
 {
-    //Obtaining document elements
     let window   = web_sys::window().unwrap();
-    let document = web_sys::window().unwrap().document().unwrap();
+    let document = window.document().unwrap();
 
     let main_canvas       = document.get_element_by_id("stafra_canvas").unwrap().dyn_into::<web_sys::HtmlCanvasElement>().unwrap();
     let click_rule_canvas = document.get_element_by_id("click_rule_canvas").unwrap().dyn_into::<web_sys::HtmlCanvasElement>().unwrap();
-
-    let save_png_button = document.get_element_by_id("button_save_png").unwrap().dyn_into::<web_sys::HtmlButtonElement>().unwrap();
-
-    let play_pause_button = document.get_element_by_id("button_play_pause").unwrap().dyn_into::<web_sys::HtmlButtonElement>().unwrap();
-    let stop_button       = document.get_element_by_id("button_stop_record").unwrap().dyn_into::<web_sys::HtmlButtonElement>().unwrap();
-    let next_frame_button = document.get_element_by_id("button_next_frame").unwrap().dyn_into::<web_sys::HtmlButtonElement>().unwrap();
-
-    let last_frame_checkbox = document.get_element_by_id("last_frame_checkbox").unwrap().dyn_into::<web_sys::HtmlInputElement>().unwrap();
-    let last_frame_input    = document.get_element_by_id("last_frame_number").unwrap().dyn_into::<web_sys::HtmlInputElement>().unwrap();
-
-    let spawn_checkbox         = document.get_element_by_id("spawn_checkbox").unwrap().dyn_into::<web_sys::HtmlInputElement>().unwrap();
-    let decrement_spawn_button = document.get_element_by_id("decrement_spawn").unwrap().dyn_into::<web_sys::HtmlButtonElement>().unwrap();
-    let increment_spawn_button = document.get_element_by_id("increment_spawn").unwrap().dyn_into::<web_sys::HtmlButtonElement>().unwrap();
-    let spawn_range            = document.get_element_by_id("spawn_range").unwrap().dyn_into::<web_sys::HtmlInputElement>().unwrap();
-    let spawn_input            = document.get_element_by_id("spawn_number").unwrap().dyn_into::<web_sys::HtmlInputElement>().unwrap();
-
-    let smooth_transform_checkbox = document.get_element_by_id("smooth_transform_checkbox").unwrap().dyn_into::<web_sys::HtmlInputElement>().unwrap();
-
-    let show_grid_checkbox = document.get_element_by_id("grid_checkbox").unwrap().dyn_into::<web_sys::HtmlInputElement>().unwrap();
-
-    let upload_restriction_button = document.get_element_by_id("button_upload_restriction").unwrap().dyn_into::<web_sys::HtmlButtonElement>().unwrap();
-    let clear_restriction_button  = document.get_element_by_id("button_clear_restriction").unwrap().dyn_into::<web_sys::HtmlButtonElement>().unwrap();
-
-    let initial_state_upload_input = document.get_element_by_id("board_input").unwrap().dyn_into::<web_sys::HtmlInputElement>().unwrap();
-    let restriction_upload_input   = document.get_element_by_id("restriction_input").unwrap().dyn_into::<web_sys::HtmlInputElement>().unwrap();
-
-    let initial_state_select = document.get_element_by_id("initial_states").unwrap().dyn_into::<web_sys::HtmlSelectElement>().unwrap();
-    let size_select          = document.get_element_by_id("sizes").unwrap().dyn_into::<web_sys::HtmlSelectElement>().unwrap();
-
 
     //Apparently it's necessary to do it, width and height are not set up automatically
     main_canvas.set_width((main_canvas.client_width()               as f64 * window.device_pixel_ratio()) as u32);
@@ -72,50 +42,13 @@ pub async fn run_event_loop()
     click_rule_canvas.set_width((click_rule_canvas.client_width()   as f64 * window.device_pixel_ratio()) as u32);
     click_rule_canvas.set_height((click_rule_canvas.client_height() as f64 * window.device_pixel_ratio()) as u32);
 
-
     //Reading query string data
     let state_params = parse_query_string(window.location().search().unwrap().as_str());
-    let board_size = app_state::AppState::board_size_from_index(state_params.size_index);
-
-    initial_state_select.set_value(match state_params.initial_state
-    {
-        stafra_state::StandardResetBoardType::Corners => "initial_state_corners",
-        stafra_state::StandardResetBoardType::Edges   => "initial_state_sides",
-        stafra_state::StandardResetBoardType::Center  => "initial_state_center"
-    });
-
-    size_select.set_selected_index(state_params.size_index as i32);
-
-    if state_params.final_frame != u32::MAX
-    {
-        last_frame_checkbox.set_checked(true);
-        last_frame_input.set_value_as_number(state_params.final_frame as f64);
-    }
-    else
-    {
-        last_frame_checkbox.set_checked(false);
-        last_frame_input.set_value_as_number((board_size / 2) as f64);
-    }
-
-    if state_params.spawn != u32::MAX
-    {
-        spawn_checkbox.set_checked(true);
-        smooth_transform_checkbox.set_checked(state_params.smooth_transform);
-
-        spawn_range.set_value_as_number(state_params.spawn as f64);
-        spawn_input.set_value(&state_params.spawn.to_string());
-    }
-    else
-    {
-        spawn_checkbox.set_checked(false);
-        smooth_transform_checkbox.set_checked(false);
-
-        spawn_range.set_value_as_number(8 as f64);
-        spawn_input.set_value("8");
-    }
-
+    setup_initial_ui(&state_params);
 
     //Initializing the state
+    let board_size = app_state::AppState::board_size_from_index(state_params.size_index);
+
     let app_state_rc          = Rc::new(RefCell::new(app_state::AppState::new(state_params.click_rule_data, state_params.final_frame)));
     let stafra_state_rc       = Rc::new(RefCell::new(stafra_state::StafraState::new_web(&main_canvas, &click_rule_canvas, board_size, board_size).await));
     let video_record_state_rc = Rc::new(RefCell::new(video_record_state::VideoRecordState::new()));
@@ -129,75 +62,8 @@ pub async fn run_event_loop()
     stafra_state.set_smooth_transform_enabled(state_params.smooth_transform);
     stafra_state.clear_restriction();
 
-
-    //Start
-    app_state.run_state  = RunState::Running;
-
-    stafra_state.set_click_rule_read_only(true);
-    stafra_state.set_click_rule_grid_enabled(false);
-
-
-    //Creating closures
-    let click_rule_change_closure = create_click_rule_change_closure(app_state_rc.clone(), stafra_state_rc.clone());
-
-    let save_png_closure = create_save_png_closure(stafra_state_rc.clone());
-
-    let play_pause_closure = create_play_pause_closure(app_state_rc.clone(), stafra_state_rc.clone());
-    let stop_closure       = create_stop_closure(app_state_rc.clone(), stafra_state_rc.clone(), video_record_state_rc.clone());
-    let next_frame_closure = create_next_frame_closure(app_state_rc.clone(), stafra_state_rc.clone());
-
-    let enable_last_frame_closure = create_enable_last_frame_closure(app_state_rc.clone(), video_record_state_rc.clone());
-    let change_last_frame_closure = create_change_last_frame_closure(app_state_rc.clone(), video_record_state_rc.clone());
-
-    let enable_spawn_closure    = create_enable_spawn_closure(stafra_state_rc.clone());
-    let decrement_spawn_closure = create_decrement_spawn_closure(stafra_state_rc.clone());
-    let increment_spawn_closure = create_increment_spawn_closure(stafra_state_rc.clone());
-    let change_spawn_closure    = create_change_spawn_closure(stafra_state_rc.clone());
-
-    let smooth_transform_closure = create_change_smooth_transform_closure(stafra_state_rc.clone());
-
-    let show_grid_closure = create_show_grid_closure(stafra_state_rc.clone());
-
-    let upload_restriction_closure = create_upload_restriction_closure();
-    let clear_restriction_closure = create_clear_restriction_closure(stafra_state_rc.clone());
-
-    let initial_state_upload_input_closure = create_board_upload_input_closure(app_state_rc.clone(), stafra_state_rc.clone());
-    let restriction_upload_input_closure   = create_upload_restriction_input_closure(stafra_state_rc.clone());
-
-    let select_initial_state_closure = create_select_initial_state_closure(stafra_state_rc.clone());
-    let select_size_closure          = create_select_size_closure(app_state_rc.clone(), stafra_state_rc.clone());
-
-
     //Setting closures
-    click_rule_canvas.set_onmousedown(Some(click_rule_change_closure.as_ref().unchecked_ref()));
-
-    save_png_button.set_onclick(Some(save_png_closure.as_ref().unchecked_ref()));
-
-    play_pause_button.set_onclick(Some(play_pause_closure.as_ref().unchecked_ref()));
-    stop_button.set_onclick(Some(stop_closure.as_ref().unchecked_ref()));
-    next_frame_button.set_onclick(Some(next_frame_closure.as_ref().unchecked_ref()));
-
-    last_frame_checkbox.set_onclick(Some(enable_last_frame_closure.as_ref().unchecked_ref()));
-    last_frame_input.set_oninput(Some(change_last_frame_closure.as_ref().unchecked_ref()));
-
-    spawn_checkbox.set_onclick(Some(enable_spawn_closure.as_ref().unchecked_ref()));
-    decrement_spawn_button.set_onclick(Some(decrement_spawn_closure.as_ref().unchecked_ref()));
-    increment_spawn_button.set_onclick(Some(increment_spawn_closure.as_ref().unchecked_ref()));
-    spawn_range.set_oninput(Some(change_spawn_closure.as_ref().unchecked_ref()));
-
-    smooth_transform_checkbox.set_onclick(Some(smooth_transform_closure.as_ref().unchecked_ref()));
-
-    show_grid_checkbox.set_onclick(Some(show_grid_closure.as_ref().unchecked_ref()));
-
-    upload_restriction_button.set_onclick(Some(upload_restriction_closure.as_ref().unchecked_ref()));
-    clear_restriction_button.set_onclick(Some(clear_restriction_closure.as_ref().unchecked_ref()));
-
-    initial_state_upload_input.set_onchange(Some(initial_state_upload_input_closure.as_ref().unchecked_ref()));
-    restriction_upload_input.set_onchange(Some(restriction_upload_input_closure.as_ref().unchecked_ref()));
-
-    initial_state_select.set_onchange(Some(select_initial_state_closure.as_ref().unchecked_ref()));
-    size_select.set_onchange(Some(select_size_closure.as_ref().unchecked_ref()));
-
+    create_closures(app_state_rc.clone(), stafra_state_rc.clone(), video_record_state_rc.clone());
 
     //Refresh handler
     let app_state_clone_for_refresh          = app_state_rc.clone();
@@ -304,36 +170,56 @@ pub async fn run_event_loop()
         window.request_animation_frame(refresh_function.borrow().as_ref().unwrap().as_ref().unchecked_ref()).expect("Request animation frame error");
     }) as Box<dyn FnMut()>));
 
+
+    //Start
+    app_state.run_state = RunState::Running;
+
+    stafra_state.set_click_rule_read_only(true);
+    stafra_state.set_click_rule_grid_enabled(false);
+
     update_ui(app_state.run_state);
 
     window.request_animation_frame(refresh_function_copy.borrow().as_ref().unwrap().as_ref().unchecked_ref()).expect("Request animation frame error!");
-
-
-    //Forget the closures to keep them alive
-    click_rule_change_closure.forget();
-    save_png_closure.forget();
-    play_pause_closure.forget();
-    stop_closure.forget();
-    next_frame_closure.forget();
-    enable_last_frame_closure.forget();
-    change_last_frame_closure.forget();
-    enable_spawn_closure.forget();
-    decrement_spawn_closure.forget();
-    increment_spawn_closure.forget();
-    change_spawn_closure.forget();
-    smooth_transform_closure.forget();
-    show_grid_closure.forget();
-    upload_restriction_closure.forget();
-    clear_restriction_closure.forget();
-    initial_state_upload_input_closure.forget();
-    restriction_upload_input_closure.forget();
-    select_initial_state_closure.forget();
-    select_size_closure.forget();
 }
 
-fn create_click_rule_change_closure(app_state_rc: Rc<RefCell<app_state::AppState>>, stafra_state_rc: Rc<RefCell<stafra_state::StafraState>>) -> Closure<dyn Fn(web_sys::Event)>
+fn create_closures(app_state_rc: Rc<RefCell<app_state::AppState>>, stafra_state_rc: Rc<RefCell<stafra_state::StafraState>>, video_record_state_rc: Rc<RefCell<video_record_state::VideoRecordState>>)
 {
-    Closure::wrap(Box::new(move |event: web_sys::Event|
+    create_click_rule_change_closure(app_state_rc.clone(), stafra_state_rc.clone());
+
+    create_save_png_closure(stafra_state_rc.clone());
+
+    create_play_pause_closure(app_state_rc.clone(), stafra_state_rc.clone());
+    create_stop_closure(app_state_rc.clone(), stafra_state_rc.clone(), video_record_state_rc.clone());
+    create_next_frame_closure(app_state_rc.clone(), stafra_state_rc.clone());
+
+    create_enable_last_frame_closure(app_state_rc.clone(), video_record_state_rc.clone());
+    create_change_last_frame_closure(app_state_rc.clone(), video_record_state_rc.clone());
+
+    create_enable_spawn_closure(stafra_state_rc.clone());
+    create_decrement_spawn_closure(stafra_state_rc.clone());
+    create_increment_spawn_closure(stafra_state_rc.clone());
+    create_change_spawn_closure(stafra_state_rc.clone());
+
+    create_change_smooth_transform_closure(stafra_state_rc.clone());
+
+    create_show_grid_closure(stafra_state_rc.clone());
+
+    create_upload_restriction_closure();
+    create_clear_restriction_closure(stafra_state_rc.clone());
+
+    create_board_upload_input_closure(app_state_rc.clone(), stafra_state_rc.clone());
+    create_upload_restriction_input_closure(stafra_state_rc.clone());
+
+    create_select_initial_state_closure(stafra_state_rc.clone());
+    create_select_size_closure(app_state_rc.clone(), stafra_state_rc.clone());
+}
+
+fn create_click_rule_change_closure(app_state_rc: Rc<RefCell<app_state::AppState>>, stafra_state_rc: Rc<RefCell<stafra_state::StafraState>>)
+{
+    let document = web_sys::window().unwrap().document().unwrap();
+    let click_rule_canvas = document.get_element_by_id("click_rule_canvas").unwrap().dyn_into::<web_sys::HtmlCanvasElement>().unwrap();
+
+    let click_rule_change_closure = Closure::wrap(Box::new(move |event: web_sys::Event|
     {
         let mut app_state    = app_state_rc.borrow_mut();
         let mut stafra_state = stafra_state_rc.borrow_mut();
@@ -374,22 +260,34 @@ fn create_click_rule_change_closure(app_state_rc: Rc<RefCell<app_state::AppState
             window.history().unwrap().replace_state_with_url(&wasm_bindgen::JsValue::NULL, "", Some(&new_search_state)).unwrap();
         }
     })
-    as Box<dyn Fn(web_sys::Event)>)
+    as Box<dyn Fn(web_sys::Event)>);
+
+    click_rule_canvas.set_onmousedown(Some(click_rule_change_closure.as_ref().unchecked_ref()));
+    click_rule_change_closure.forget();
 }
 
-fn create_save_png_closure(stafra_state_rc: Rc<RefCell<stafra_state::StafraState>>) -> Closure<dyn Fn()>
+fn create_save_png_closure(stafra_state_rc: Rc<RefCell<stafra_state::StafraState>>)
 {
-    Closure::wrap(Box::new(move ||
+    let document = web_sys::window().unwrap().document().unwrap();
+    let save_png_button = document.get_element_by_id("button_save_png").unwrap().dyn_into::<web_sys::HtmlButtonElement>().unwrap();
+
+    let save_png_closure = Closure::wrap(Box::new(move ||
     {
         let mut stafra_state = stafra_state_rc.borrow_mut();
         stafra_state.post_save_png_request();
     })
-    as Box<dyn Fn()>)
+    as Box<dyn Fn()>);
+
+    save_png_button.set_onclick(Some(save_png_closure.as_ref().unchecked_ref()));
+    save_png_closure.forget();
 }
 
-fn create_play_pause_closure(app_state_rc: Rc<RefCell<app_state::AppState>>, stafra_state_rc: Rc<RefCell<stafra_state::StafraState>>) -> Closure<dyn Fn()>
+fn create_play_pause_closure(app_state_rc: Rc<RefCell<app_state::AppState>>, stafra_state_rc: Rc<RefCell<stafra_state::StafraState>>)
 {
-    Closure::wrap(Box::new(move ||
+    let document = web_sys::window().unwrap().document().unwrap();
+    let play_pause_button = document.get_element_by_id("button_play_pause").unwrap().dyn_into::<web_sys::HtmlButtonElement>().unwrap();
+
+    let play_pause_closure = Closure::wrap(Box::new(move ||
     {
         let mut app_state    = app_state_rc.borrow_mut();
         let mut stafra_state = stafra_state_rc.borrow_mut();
@@ -410,12 +308,18 @@ fn create_play_pause_closure(app_state_rc: Rc<RefCell<app_state::AppState>>, sta
             update_next_frame_button_paused_recording(!stafra_state.video_frame_queue_full());
         }
 
-    }) as Box<dyn Fn()>)
+    }) as Box<dyn Fn()>);
+
+    play_pause_button.set_onclick(Some(play_pause_closure.as_ref().unchecked_ref()));
+    play_pause_closure.forget();
 }
 
-fn create_stop_closure(app_state_rc: Rc<RefCell<app_state::AppState>>, stafra_state_rc: Rc<RefCell<stafra_state::StafraState>>, video_record_state_rc: Rc<RefCell<video_record_state::VideoRecordState>>) -> Closure<dyn Fn()>
+fn create_stop_closure(app_state_rc: Rc<RefCell<app_state::AppState>>, stafra_state_rc: Rc<RefCell<stafra_state::StafraState>>, video_record_state_rc: Rc<RefCell<video_record_state::VideoRecordState>>)
 {
-    Closure::wrap(Box::new(move ||
+    let document = web_sys::window().unwrap().document().unwrap();
+    let stop_button = document.get_element_by_id("button_stop_record").unwrap().dyn_into::<web_sys::HtmlButtonElement>().unwrap();
+
+    let stop_closure = Closure::wrap(Box::new(move ||
     {
         let mut app_state          = app_state_rc.borrow_mut();
         let mut stafra_state       = stafra_state_rc.borrow_mut();
@@ -452,12 +356,18 @@ fn create_stop_closure(app_state_rc: Rc<RefCell<app_state::AppState>>, stafra_st
         };
 
         update_ui(app_state.run_state);
-    }) as Box<dyn Fn()>)
+    }) as Box<dyn Fn()>);
+
+    stop_button.set_onclick(Some(stop_closure.as_ref().unchecked_ref()));
+    stop_closure.forget();
 }
 
-fn create_next_frame_closure(app_state_rc: Rc<RefCell<app_state::AppState>>, stafra_state_rc: Rc<RefCell<stafra_state::StafraState>>) -> Closure<dyn Fn()>
+fn create_next_frame_closure(app_state_rc: Rc<RefCell<app_state::AppState>>, stafra_state_rc: Rc<RefCell<stafra_state::StafraState>>)
 {
-    Closure::wrap(Box::new(move ||
+    let document = web_sys::window().unwrap().document().unwrap();
+    let next_frame_button = document.get_element_by_id("button_next_frame").unwrap().dyn_into::<web_sys::HtmlButtonElement>().unwrap();
+
+    let next_frame_closure = Closure::wrap(Box::new(move ||
     {
         let mut app_state    = app_state_rc.borrow_mut();
         let mut stafra_state = stafra_state_rc.borrow_mut();
@@ -477,20 +387,25 @@ fn create_next_frame_closure(app_state_rc: Rc<RefCell<app_state::AppState>>, sta
         {
             stafra_state.update();
         }
-    }) as Box<dyn Fn()>)
+    }) as Box<dyn Fn()>);
+
+    next_frame_button.set_onclick(Some(next_frame_closure.as_ref().unchecked_ref()));
+    next_frame_closure.forget();
 }
 
-fn create_enable_last_frame_closure(app_state_rc: Rc<RefCell<app_state::AppState>>, video_record_state_rc: Rc<RefCell<video_record_state::VideoRecordState>>) -> Closure<dyn Fn(web_sys::Event)>
+fn create_enable_last_frame_closure(app_state_rc: Rc<RefCell<app_state::AppState>>, video_record_state_rc: Rc<RefCell<video_record_state::VideoRecordState>>)
 {
-    Closure::wrap(Box::new(move |event: web_sys::Event|
+    let window = web_sys::window().unwrap();
+    let document = window.document().unwrap();
+    let last_frame_checkbox = document.get_element_by_id("last_frame_checkbox").unwrap().dyn_into::<web_sys::HtmlInputElement>().unwrap();
+
+    let enable_last_frame_closure = Closure::wrap(Box::new(move |event: web_sys::Event|
     {
         let mut app_state          = app_state_rc.borrow_mut();
         let mut video_record_state = video_record_state_rc.borrow_mut();
 
-        let window = web_sys::window().unwrap();
         let query_string = web_sys::UrlSearchParams::new_with_str(window.location().search().unwrap().as_str()).unwrap();
 
-        let document         = web_sys::window().unwrap().document().unwrap();
         let last_frame_input = document.get_element_by_id("last_frame_number").unwrap().dyn_into::<web_sys::HtmlInputElement>().unwrap();
 
         let last_frame_checkbox = event.target().unwrap().dyn_into::<web_sys::HtmlInputElement>().unwrap();
@@ -523,19 +438,24 @@ fn create_enable_last_frame_closure(app_state_rc: Rc<RefCell<app_state::AppState
 
         video_record_state.set_frame_limit(app_state.last_frame);
 
-    }) as Box<dyn Fn(web_sys::Event)>)
+    }) as Box<dyn Fn(web_sys::Event)>);
+
+    last_frame_checkbox.set_onclick(Some(enable_last_frame_closure.as_ref().unchecked_ref()));
+    enable_last_frame_closure.forget();
 }
 
-fn create_enable_spawn_closure(stafra_state_rc: Rc<RefCell<stafra_state::StafraState>>) -> Closure<dyn Fn(web_sys::Event)>
+fn create_enable_spawn_closure(stafra_state_rc: Rc<RefCell<stafra_state::StafraState>>)
 {
-    Closure::wrap(Box::new(move |event: web_sys::Event|
+    let window = web_sys::window().unwrap();
+    let document = window.document().unwrap();
+    let spawn_checkbox = document.get_element_by_id("spawn_checkbox").unwrap().dyn_into::<web_sys::HtmlInputElement>().unwrap();
+
+    let enable_spawn_closure = Closure::wrap(Box::new(move |event: web_sys::Event|
     {
         let mut stafra_state = stafra_state_rc.borrow_mut();
 
-        let window       = web_sys::window().unwrap();
         let query_string = web_sys::UrlSearchParams::new_with_str(window.location().search().unwrap().as_str()).unwrap();
 
-        let document                  = window.document().unwrap();
         let spawn_decrement_button    = document.get_element_by_id("decrement_spawn").unwrap().dyn_into::<web_sys::HtmlButtonElement>().unwrap();
         let spawn_increment_button    = document.get_element_by_id("increment_spawn").unwrap().dyn_into::<web_sys::HtmlButtonElement>().unwrap();
         let spawn_slider              = document.get_element_by_id("spawn_range").unwrap().dyn_into::<web_sys::HtmlInputElement>().unwrap();
@@ -565,19 +485,24 @@ fn create_enable_spawn_closure(stafra_state_rc: Rc<RefCell<stafra_state::StafraS
         let new_search_state = window.location().pathname().unwrap() + "?" + &query_string.to_string().as_string().unwrap();
         window.history().unwrap().replace_state_with_url(&wasm_bindgen::JsValue::NULL, "", Some(&new_search_state)).unwrap();
 
-    }) as Box<dyn Fn(web_sys::Event)>)
+    }) as Box<dyn Fn(web_sys::Event)>);
+
+    spawn_checkbox.set_onclick(Some(enable_spawn_closure.as_ref().unchecked_ref()));
+    enable_spawn_closure.forget();
 }
 
-fn create_decrement_spawn_closure(stafra_state_rc: Rc<RefCell<stafra_state::StafraState>>) -> Closure<dyn Fn()>
+fn create_decrement_spawn_closure(stafra_state_rc: Rc<RefCell<stafra_state::StafraState>>)
 {
-    Closure::wrap(Box::new(move ||
+    let window = web_sys::window().unwrap();
+    let document = window.document().unwrap();
+    let decrement_spawn_button = document.get_element_by_id("decrement_spawn").unwrap().dyn_into::<web_sys::HtmlButtonElement>().unwrap();
+
+    let decrement_spawn_closure = Closure::wrap(Box::new(move ||
     {
         let mut stafra_state = stafra_state_rc.borrow_mut();
 
-        let window       = web_sys::window().unwrap();
         let query_string = web_sys::UrlSearchParams::new_with_str(window.location().search().unwrap().as_str()).unwrap();
 
-        let document = window.document().unwrap();
         let spawn_period_input = document.get_element_by_id("spawn_number").unwrap().dyn_into::<web_sys::HtmlInputElement>().unwrap();
 
         let spawn_period_slider = document.get_element_by_id("spawn_range").unwrap().dyn_into::<web_sys::HtmlInputElement>().unwrap();
@@ -594,19 +519,24 @@ fn create_decrement_spawn_closure(stafra_state_rc: Rc<RefCell<stafra_state::Staf
         let new_search_state = window.location().pathname().unwrap() + "?" + &query_string.to_string().as_string().unwrap();
         window.history().unwrap().replace_state_with_url(&wasm_bindgen::JsValue::NULL, "", Some(&new_search_state)).unwrap();
 
-    }) as Box<dyn Fn()>)
+    }) as Box<dyn Fn()>);
+
+    decrement_spawn_button.set_onclick(Some(decrement_spawn_closure.as_ref().unchecked_ref()));
+    decrement_spawn_closure.forget();
 }
 
-fn create_increment_spawn_closure(stafra_state_rc: Rc<RefCell<stafra_state::StafraState>>) -> Closure<dyn Fn()>
+fn create_increment_spawn_closure(stafra_state_rc: Rc<RefCell<stafra_state::StafraState>>)
 {
-    Closure::wrap(Box::new(move ||
+    let window = web_sys::window().unwrap();
+    let document = window.document().unwrap();
+    let increment_spawn_button = document.get_element_by_id("increment_spawn").unwrap().dyn_into::<web_sys::HtmlButtonElement>().unwrap();
+
+    let increment_spawn_closure = Closure::wrap(Box::new(move ||
     {
         let mut stafra_state = stafra_state_rc.borrow_mut();
 
-        let window       = web_sys::window().unwrap();
         let query_string = web_sys::UrlSearchParams::new_with_str(window.location().search().unwrap().as_str()).unwrap();
 
-        let document = window.document().unwrap();
         let spawn_period_input = document.get_element_by_id("spawn_number").unwrap().dyn_into::<web_sys::HtmlInputElement>().unwrap();
 
         let spawn_period_slider = document.get_element_by_id("spawn_range").unwrap().dyn_into::<web_sys::HtmlInputElement>().unwrap();
@@ -623,14 +553,21 @@ fn create_increment_spawn_closure(stafra_state_rc: Rc<RefCell<stafra_state::Staf
         let new_search_state = window.location().pathname().unwrap() + "?" + &query_string.to_string().as_string().unwrap();
         window.history().unwrap().replace_state_with_url(&wasm_bindgen::JsValue::NULL, "", Some(&new_search_state)).unwrap();
 
-    }) as Box<dyn Fn()>)
+    }) as Box<dyn Fn()>);
+
+    increment_spawn_button.set_onclick(Some(increment_spawn_closure.as_ref().unchecked_ref()));
+    increment_spawn_closure.forget();
 }
 
-fn create_change_spawn_closure(stafra_state_rc: Rc<RefCell<stafra_state::StafraState>>) -> Closure<dyn Fn(web_sys::Event)>
+fn create_change_spawn_closure(stafra_state_rc: Rc<RefCell<stafra_state::StafraState>>)
 {
+    let window = web_sys::window().unwrap();
+    let document = window.document().unwrap();
+    let spawn_range = document.get_element_by_id("spawn_range").unwrap().dyn_into::<web_sys::HtmlInputElement>().unwrap();
+
     let spawn_query_string_timeout_closure = Closure::wrap(Box::new(move |spawn_value: &JsValue|
     {
-        let window       = web_sys::window().unwrap();
+        let window = web_sys::window().unwrap();
         let query_string = web_sys::UrlSearchParams::new_with_str(window.location().search().unwrap().as_str()).unwrap();
 
         query_string.set("spawn_period", &spawn_value.as_string().unwrap());
@@ -641,12 +578,9 @@ fn create_change_spawn_closure(stafra_state_rc: Rc<RefCell<stafra_state::StafraS
     }) as Box<dyn FnMut(&JsValue)>);
 
     let timeout_update_arguments = js_sys::Array::new_with_length(1);
-    Closure::wrap(Box::new(move |event: web_sys::Event|
+    let change_spawn_closure = Closure::wrap(Box::new(move |event: web_sys::Event|
     {
         let mut stafra_state = stafra_state_rc.borrow_mut();
-
-        let window   = web_sys::window().unwrap();
-        let document = window.document().unwrap();
 
         let spawn_period_slider = event.target().unwrap().dyn_into::<web_sys::HtmlInputElement>().unwrap();
 
@@ -659,16 +593,22 @@ fn create_change_spawn_closure(stafra_state_rc: Rc<RefCell<stafra_state::StafraS
         timeout_update_arguments.set(0, JsValue::from_str(&new_spawn_period.to_string()));
         window.set_timeout_with_callback_and_timeout_and_arguments(&spawn_query_string_timeout_closure.as_ref().unchecked_ref(), 50, &timeout_update_arguments).unwrap();
 
-    }) as Box<dyn Fn(web_sys::Event)>)
+    }) as Box<dyn Fn(web_sys::Event)>);
+
+    spawn_range.set_oninput(Some(change_spawn_closure.as_ref().unchecked_ref()));
+    change_spawn_closure.forget();
 }
 
-fn create_change_smooth_transform_closure(stafra_state_rc: Rc<RefCell<stafra_state::StafraState>>) -> Closure<dyn Fn(web_sys::Event)>
+fn create_change_smooth_transform_closure(stafra_state_rc: Rc<RefCell<stafra_state::StafraState>>)
 {
-    Closure::wrap(Box::new(move |event: web_sys::Event|
+    let window   = web_sys::window().unwrap();
+    let document = window.document().unwrap();
+    let smooth_transform_checkbox = document.get_element_by_id("smooth_transform_checkbox").unwrap().dyn_into::<web_sys::HtmlInputElement>().unwrap();
+
+    let smooth_transform_closure = Closure::wrap(Box::new(move |event: web_sys::Event|
     {
         let mut stafra_state = stafra_state_rc.borrow_mut();
 
-        let window       = web_sys::window().unwrap();
         let query_string = web_sys::UrlSearchParams::new_with_str(window.location().search().unwrap().as_str()).unwrap();
 
         let smooth_transform_checkbox = event.target().unwrap().dyn_into::<web_sys::HtmlInputElement>().unwrap();
@@ -686,17 +626,23 @@ fn create_change_smooth_transform_closure(stafra_state_rc: Rc<RefCell<stafra_sta
         let new_search_state = window.location().pathname().unwrap() + "?" + &query_string.to_string().as_string().unwrap();
         window.history().unwrap().replace_state_with_url(&wasm_bindgen::JsValue::NULL, "", Some(&new_search_state)).unwrap();
 
-    }) as Box<dyn Fn(web_sys::Event)>)
+    }) as Box<dyn Fn(web_sys::Event)>);
+
+    smooth_transform_checkbox.set_onclick(Some(smooth_transform_closure.as_ref().unchecked_ref()));
+    smooth_transform_closure.forget();
 }
 
-fn create_change_last_frame_closure(app_state_rc: Rc<RefCell<app_state::AppState>>, video_record_state_rc: Rc<RefCell<video_record_state::VideoRecordState>>) -> Closure<dyn Fn(web_sys::Event)>
+fn create_change_last_frame_closure(app_state_rc: Rc<RefCell<app_state::AppState>>, video_record_state_rc: Rc<RefCell<video_record_state::VideoRecordState>>)
 {
-    Closure::wrap(Box::new(move |event: web_sys::Event|
+    let window = web_sys::window().unwrap();
+    let document = window.document().unwrap();
+    let last_frame_input = document.get_element_by_id("last_frame_number").unwrap().dyn_into::<web_sys::HtmlInputElement>().unwrap();
+
+    let change_last_frame_closure = Closure::wrap(Box::new(move |event: web_sys::Event|
     {
         let mut app_state          = app_state_rc.borrow_mut();
         let mut video_record_state = video_record_state_rc.borrow_mut();
 
-        let window = web_sys::window().unwrap();
         let query_string = web_sys::UrlSearchParams::new_with_str(window.location().search().unwrap().as_str()).unwrap();
 
         let last_frame_input = event.target().unwrap().dyn_into::<web_sys::HtmlInputElement>().unwrap();
@@ -717,22 +663,34 @@ fn create_change_last_frame_closure(app_state_rc: Rc<RefCell<app_state::AppState
 
         video_record_state.set_frame_limit(app_state.last_frame);
 
-    }) as Box<dyn Fn(web_sys::Event)>)
+    }) as Box<dyn Fn(web_sys::Event)>);
+
+    last_frame_input.set_oninput(Some(change_last_frame_closure.as_ref().unchecked_ref()));
+    change_last_frame_closure.forget();
 }
 
-fn create_show_grid_closure(stafra_state_rc: Rc<RefCell<stafra_state::StafraState>>) -> Closure<dyn Fn(web_sys::Event)>
+fn create_show_grid_closure(stafra_state_rc: Rc<RefCell<stafra_state::StafraState>>)
 {
-    Closure::wrap(Box::new(move |event: web_sys::Event|
+    let document = web_sys::window().unwrap().document().unwrap();
+    let show_grid_checkbox = document.get_element_by_id("grid_checkbox").unwrap().dyn_into::<web_sys::HtmlInputElement>().unwrap();
+
+    let show_grid_closure = Closure::wrap(Box::new(move |event: web_sys::Event|
     {
         let mut stafra_state = stafra_state_rc.borrow_mut();
 
         let show_grid_checkbox = event.target().unwrap().dyn_into::<web_sys::HtmlInputElement>().unwrap();
         stafra_state.set_click_rule_grid_enabled(show_grid_checkbox.checked());
-    }) as Box<dyn Fn(web_sys::Event)>)
+    }) as Box<dyn Fn(web_sys::Event)>);
+
+    show_grid_checkbox.set_onclick(Some(show_grid_closure.as_ref().unchecked_ref()));
+    show_grid_closure.forget();
 }
 
-fn create_board_upload_input_closure(app_state_rc: Rc<RefCell<app_state::AppState>>, stafra_state_rc: Rc<RefCell<stafra_state::StafraState>>) -> Closure<dyn Fn(web_sys::Event)>
+fn create_board_upload_input_closure(app_state_rc: Rc<RefCell<app_state::AppState>>, stafra_state_rc: Rc<RefCell<stafra_state::StafraState>>)
 {
+    let document = web_sys::window().unwrap().document().unwrap();
+    let initial_state_upload_input = document.get_element_by_id("board_input").unwrap().dyn_into::<web_sys::HtmlInputElement>().unwrap();
+
     let board_upload_image_closure = Closure::wrap(Box::new(move |event: web_sys::Event|
     {
         let mut app_state    = app_state_rc.borrow_mut();
@@ -750,14 +708,12 @@ fn create_board_upload_input_closure(app_state_rc: Rc<RefCell<app_state::AppStat
         canvas_context.draw_image_with_html_image_element(&board_image, 0.0, 0.0).expect("Draw image error!");
         let image_data = canvas_context.get_image_data(0.0, 0.0, board_image.width() as f64, board_image.height() as f64).unwrap();
 
-        stafra_state.reset_board_custom(image_data.data().to_vec(), image_data.width(), image_data.height());
+        let new_size = stafra_state.reset_board_custom(image_data.data().to_vec(), image_data.width(), image_data.height());
 
         canvas_board.remove();
 
 
         let size_select = document.get_element_by_id("sizes").unwrap().dyn_into::<web_sys::HtmlSelectElement>().unwrap();
-        let new_size = std::cmp::min(stafra_state.board_width(), stafra_state.board_height());
-
         let size_index = (std::mem::size_of::<u32>() * 8) as u32 - new_size.leading_zeros() - 1;
         size_select.set_selected_index(size_index as i32);
 
@@ -782,13 +738,11 @@ fn create_board_upload_input_closure(app_state_rc: Rc<RefCell<app_state::AppStat
     board_file_read_closure.forget();
     board_upload_image_closure.forget();
 
-    Closure::wrap(Box::new(move |event: web_sys::Event|
+    let initial_state_upload_input_closure = Closure::wrap(Box::new(move |event: web_sys::Event|
     {
         let input_files = event.target().unwrap().dyn_into::<web_sys::HtmlInputElement>().unwrap().files().unwrap();
         if input_files.length() > 0
         {
-            let document = web_sys::window().unwrap().document().unwrap();
-
             let image_file = input_files.item(0).unwrap();
             let filename   = image_file.name();
 
@@ -805,29 +759,39 @@ fn create_board_upload_input_closure(app_state_rc: Rc<RefCell<app_state::AppStat
             //Read the data
             board_file_reader.read_as_data_url(&image_file).expect("Read data url error!");
         }
-    }) as Box<dyn Fn(web_sys::Event)>)
+    }) as Box<dyn Fn(web_sys::Event)>);
+
+    initial_state_upload_input.set_onchange(Some(initial_state_upload_input_closure.as_ref().unchecked_ref()));
+    initial_state_upload_input_closure.forget();
 }
 
-fn create_upload_restriction_closure() -> Closure<dyn Fn(web_sys::Event)>
+fn create_upload_restriction_closure()
 {
-    Closure::wrap(Box::new(move |_event: web_sys::Event|
+    let document = web_sys::window().unwrap().document().unwrap();
+    let upload_restriction_button = document.get_element_by_id("button_upload_restriction").unwrap().dyn_into::<web_sys::HtmlButtonElement>().unwrap();
+
+    let upload_restriction_closure = Closure::wrap(Box::new(move |_event: web_sys::Event|
     {
-        let document = web_sys::window().unwrap().document().unwrap();
         let restriction_upload_input = document.get_element_by_id("restriction_input").unwrap().dyn_into::<web_sys::HtmlInputElement>().unwrap();
         restriction_upload_input.click();
 
-    }) as Box<dyn Fn(web_sys::Event)>)
+    }) as Box<dyn Fn(web_sys::Event)>);
+
+    upload_restriction_button.set_onclick(Some(upload_restriction_closure.as_ref().unchecked_ref()));
+    upload_restriction_closure.forget();
 }
 
-fn create_upload_restriction_input_closure(stafra_state_rc: Rc<RefCell<stafra_state::StafraState>>) -> Closure<dyn Fn(web_sys::Event)>
+fn create_upload_restriction_input_closure(stafra_state_rc: Rc<RefCell<stafra_state::StafraState>>)
 {
+    let document = web_sys::window().unwrap().document().unwrap();
+    let restriction_upload_input = document.get_element_by_id("restriction_input").unwrap().dyn_into::<web_sys::HtmlInputElement>().unwrap();
+
     let restriction_upload_image_closure = Closure::wrap(Box::new(move |event: web_sys::Event|
     {
         let mut stafra_state = stafra_state_rc.borrow_mut();
 
         let restriction_image = event.target().unwrap().dyn_into::<web_sys::HtmlImageElement>().unwrap();
 
-        let document           = web_sys::window().unwrap().document().unwrap();
         let canvas_restriction = document.create_element("canvas").unwrap().dyn_into::<web_sys::HtmlCanvasElement>().unwrap();
         let canvas_context     = canvas_restriction.get_context("2d").unwrap().unwrap().dyn_into::<web_sys::CanvasRenderingContext2d>().unwrap();
 
@@ -864,7 +828,7 @@ fn create_upload_restriction_input_closure(stafra_state_rc: Rc<RefCell<stafra_st
     restriction_file_read_closure.forget();
     restriction_upload_image_closure.forget();
 
-    Closure::wrap(Box::new(move |event: web_sys::Event|
+    let restriction_upload_input_closure = Closure::wrap(Box::new(move |event: web_sys::Event|
     {
         let input_files = event.target().unwrap().dyn_into::<web_sys::HtmlInputElement>().unwrap().files().unwrap();
         if input_files.length() > 0
@@ -872,28 +836,40 @@ fn create_upload_restriction_input_closure(stafra_state_rc: Rc<RefCell<stafra_st
             let image_file = input_files.item(0).unwrap();
             restriction_file_reader.read_as_data_url(&image_file).expect("Read data url error!");
         }
-    }) as Box<dyn Fn(web_sys::Event)>)
+    }) as Box<dyn Fn(web_sys::Event)>);
+
+    restriction_upload_input.set_onchange(Some(restriction_upload_input_closure.as_ref().unchecked_ref()));
+    restriction_upload_input_closure.forget();
 }
 
-fn create_clear_restriction_closure(stafra_state_rc: Rc<RefCell<stafra_state::StafraState>>) -> Closure<dyn Fn(web_sys::Event)>
+fn create_clear_restriction_closure(stafra_state_rc: Rc<RefCell<stafra_state::StafraState>>)
 {
-    Closure::wrap(Box::new(move |event: web_sys::Event|
+    let document = web_sys::window().unwrap().document().unwrap();
+    let clear_restriction_button  = document.get_element_by_id("button_clear_restriction").unwrap().dyn_into::<web_sys::HtmlButtonElement>().unwrap();
+
+    let clear_restriction_closure = Closure::wrap(Box::new(move |event: web_sys::Event|
     {
         let mut stafra_state = stafra_state_rc.borrow_mut();
         stafra_state.clear_restriction();
 
         let clear_restriction_button = event.target().unwrap().dyn_into::<web_sys::HtmlButtonElement>().unwrap();
         clear_restriction_button.set_hidden(true);
-    }) as Box<dyn Fn(web_sys::Event)>)
+    }) as Box<dyn Fn(web_sys::Event)>);
+
+    clear_restriction_button.set_onclick(Some(clear_restriction_closure.as_ref().unchecked_ref()));
+    clear_restriction_closure.forget();
 }
 
-fn create_select_initial_state_closure(stafra_state_rc: Rc<RefCell<stafra_state::StafraState>>) -> Closure<dyn Fn(web_sys::Event)>
+fn create_select_initial_state_closure(stafra_state_rc: Rc<RefCell<stafra_state::StafraState>>)
 {
-    Closure::wrap(Box::new(move |event: web_sys::Event|
+    let window = web_sys::window().unwrap();
+    let document = window.document().unwrap();
+    let initial_state_select = document.get_element_by_id("initial_states").unwrap().dyn_into::<web_sys::HtmlSelectElement>().unwrap();
+
+    let select_initial_state_closure = Closure::wrap(Box::new(move |event: web_sys::Event|
     {
         let mut stafra_state = stafra_state_rc.borrow_mut();
 
-        let window = web_sys::window().unwrap();
         let query_string = web_sys::UrlSearchParams::new_with_str(window.location().search().unwrap().as_str()).unwrap();
 
         let board_reset_select = event.target().unwrap().dyn_into::<web_sys::HtmlSelectElement>().unwrap();
@@ -919,7 +895,6 @@ fn create_select_initial_state_closure(stafra_state_rc: Rc<RefCell<stafra_state:
 
             "initial_state_custom" =>
             {
-                let document = web_sys::window().unwrap().document().unwrap();
                 let initial_state_upload_input = document.get_element_by_id("board_input").unwrap().dyn_into::<web_sys::HtmlInputElement>().unwrap();
                 initial_state_upload_input.click();
 
@@ -932,17 +907,23 @@ fn create_select_initial_state_closure(stafra_state_rc: Rc<RefCell<stafra_state:
         let new_search_state = window.location().pathname().unwrap() + "?" + &query_string.to_string().as_string().unwrap();
         window.history().unwrap().replace_state_with_url(&wasm_bindgen::JsValue::NULL, "", Some(&new_search_state)).unwrap();
 
-    }) as Box<dyn Fn(web_sys::Event)>)
+    }) as Box<dyn Fn(web_sys::Event)>);
+
+    initial_state_select.set_onchange(Some(select_initial_state_closure.as_ref().unchecked_ref()));
+    select_initial_state_closure.forget();
 }
 
-fn create_select_size_closure(app_state_rc: Rc<RefCell<app_state::AppState>>, stafra_state_rc: Rc<RefCell<stafra_state::StafraState>>) -> Closure<dyn Fn(web_sys::Event)>
+fn create_select_size_closure(app_state_rc: Rc<RefCell<app_state::AppState>>, stafra_state_rc: Rc<RefCell<stafra_state::StafraState>>)
 {
-    Closure::wrap(Box::new(move |event: web_sys::Event|
+    let window = web_sys::window().unwrap();
+    let document = window.document().unwrap();
+    let size_select = document.get_element_by_id("sizes").unwrap().dyn_into::<web_sys::HtmlSelectElement>().unwrap();
+
+    let select_size_closure = Closure::wrap(Box::new(move |event: web_sys::Event|
     {
         let mut app_state    = app_state_rc.borrow_mut();
         let mut stafra_state = stafra_state_rc.borrow_mut();
 
-        let window = web_sys::window().unwrap();
         let query_string = web_sys::UrlSearchParams::new_with_str(window.location().search().unwrap().as_str()).unwrap();
 
         let size_select = event.target().unwrap().dyn_into::<web_sys::HtmlSelectElement>().unwrap();
@@ -959,7 +940,10 @@ fn create_select_size_closure(app_state_rc: Rc<RefCell<app_state::AppState>>, st
         let new_search_state = window.location().pathname().unwrap() + "?" + &query_string.to_string().as_string().unwrap();
         window.history().unwrap().replace_state_with_url(&wasm_bindgen::JsValue::NULL, "", Some(&new_search_state)).unwrap();
 
-    }) as Box<dyn Fn(web_sys::Event)>)
+    }) as Box<dyn Fn(web_sys::Event)>);
+
+    size_select.set_onchange(Some(select_size_closure.as_ref().unchecked_ref()));
+    select_size_closure.forget();
 }
 
 fn parse_query_string(query_string: &str) -> QueryStringParams
@@ -1068,6 +1052,59 @@ fn find_select_option_index(select_element: &web_sys::HtmlSelectElement, value: 
     }
 
     return -1;
+}
+
+fn setup_initial_ui(state_params: &QueryStringParams)
+{
+    let document = web_sys::window().unwrap().document().unwrap();
+
+    let initial_state_select      = document.get_element_by_id("initial_states").unwrap().dyn_into::<web_sys::HtmlSelectElement>().unwrap();
+    let size_select               = document.get_element_by_id("sizes").unwrap().dyn_into::<web_sys::HtmlSelectElement>().unwrap();
+    let last_frame_checkbox       = document.get_element_by_id("last_frame_checkbox").unwrap().dyn_into::<web_sys::HtmlInputElement>().unwrap();
+    let last_frame_input          = document.get_element_by_id("last_frame_number").unwrap().dyn_into::<web_sys::HtmlInputElement>().unwrap();
+    let spawn_checkbox            = document.get_element_by_id("spawn_checkbox").unwrap().dyn_into::<web_sys::HtmlInputElement>().unwrap();
+    let smooth_transform_checkbox = document.get_element_by_id("smooth_transform_checkbox").unwrap().dyn_into::<web_sys::HtmlInputElement>().unwrap();
+    let spawn_range               = document.get_element_by_id("spawn_range").unwrap().dyn_into::<web_sys::HtmlInputElement>().unwrap();
+    let spawn_input               = document.get_element_by_id("spawn_number").unwrap().dyn_into::<web_sys::HtmlInputElement>().unwrap();
+
+    let board_size = app_state::AppState::board_size_from_index(state_params.size_index);
+
+    initial_state_select.set_value(match state_params.initial_state
+    {
+        stafra_state::StandardResetBoardType::Corners => "initial_state_corners",
+        stafra_state::StandardResetBoardType::Edges   => "initial_state_sides",
+        stafra_state::StandardResetBoardType::Center  => "initial_state_center"
+    });
+
+    size_select.set_selected_index(state_params.size_index as i32);
+
+    if state_params.final_frame != u32::MAX
+    {
+        last_frame_checkbox.set_checked(true);
+        last_frame_input.set_value_as_number(state_params.final_frame as f64);
+    }
+    else
+    {
+        last_frame_checkbox.set_checked(false);
+        last_frame_input.set_value_as_number((board_size / 2) as f64);
+    }
+
+    if state_params.spawn != u32::MAX
+    {
+        spawn_checkbox.set_checked(true);
+        smooth_transform_checkbox.set_checked(state_params.smooth_transform);
+
+        spawn_range.set_value_as_number(state_params.spawn as f64);
+        spawn_input.set_value(&state_params.spawn.to_string());
+    }
+    else
+    {
+        spawn_checkbox.set_checked(false);
+        smooth_transform_checkbox.set_checked(false);
+
+        spawn_range.set_value_as_number(8 as f64);
+        spawn_input.set_value("8");
+    }
 }
 
 fn update_ui(run_state: RunState)
