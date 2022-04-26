@@ -14,7 +14,7 @@ impl StafraInitialStateBindings
     {
         let initial_state_texture_descriptor = wgpu::TextureDescriptor
         {
-            label: None,
+            label: Some("Initial state texture"),
             size:  wgpu::Extent3d
             {
                 width:                 board_width,
@@ -42,7 +42,7 @@ impl StafraInitialStateBindings
     {
         self.initial_state_tex.create_view(&wgpu::TextureViewDescriptor
         {
-            label:             None,
+            label:             Some("Initial state view"),
             format:            Some(wgpu::TextureFormat::Rgba8Unorm),
             dimension:         Some(wgpu::TextureViewDimension::D2),
             aspect:            wgpu::TextureAspect::All,

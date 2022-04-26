@@ -63,7 +63,7 @@ impl StafraBoardBindings
 
         let board_texture_descriptor = wgpu::TextureDescriptor
         {
-            label: None,
+            label: Some("Board texture"),
             size:  wgpu::Extent3d
             {
                 width:                 (board_width  + 1) / 2,
@@ -80,7 +80,7 @@ impl StafraBoardBindings
         let final_state_mips = (std::cmp::max(board_width, board_height) as f32).log2().ceil() as u32;
         let final_state_texture_descriptor = wgpu::TextureDescriptor
         {
-            label: None,
+            label: Some("Final state texture"),
             size:  wgpu::Extent3d
             {
                 width:                 (board_width  + 1) / 2,
@@ -96,7 +96,7 @@ impl StafraBoardBindings
 
         let video_frame_texture_descriptor = wgpu::TextureDescriptor
         {
-            label: None,
+            label: Some("Video frame texture"),
             size:  wgpu::Extent3d
             {
                 width:                 1024,
@@ -120,7 +120,7 @@ impl StafraBoardBindings
 
         let board_view_descriptor = wgpu::TextureViewDescriptor
         {
-            label:             None,
+            label:             Some("Board view"),
             format:            Some(wgpu::TextureFormat::R32Uint),
             dimension:         Some(wgpu::TextureViewDimension::D2),
             aspect:            wgpu::TextureAspect::All,
@@ -132,7 +132,7 @@ impl StafraBoardBindings
 
         let final_state_view_descriptor = wgpu::TextureViewDescriptor
         {
-            label:             None,
+            label:             Some("Final state view"),
             format:            Some(wgpu::TextureFormat::Rgba8Unorm),
             dimension:         Some(wgpu::TextureViewDimension::D2),
             aspect:            wgpu::TextureAspect::All,
@@ -155,7 +155,7 @@ impl StafraBoardBindings
         {
             final_state_mip_views.push(final_state.create_view(&wgpu::TextureViewDescriptor
             {
-                label:             None,
+                label:             Some(&format!("Final state mip {} view", i)),
                 format:            Some(wgpu::TextureFormat::Rgba8Unorm),
                 dimension:         Some(wgpu::TextureViewDimension::D2),
                 aspect:            wgpu::TextureAspect::All,
@@ -366,7 +366,7 @@ impl StafraBoardBindings
     {
         let restriction_view = self.restriction.create_view(&wgpu::TextureViewDescriptor
         {
-            label:             None,
+            label:             Some("Restriction view"),
             format:            Some(wgpu::TextureFormat::R32Uint),
             dimension:         Some(wgpu::TextureViewDimension::D2),
             aspect:            wgpu::TextureAspect::All,
@@ -398,7 +398,7 @@ impl StafraBoardBindings
 
         let image_buffer = device.create_buffer(&wgpu::BufferDescriptor
         {
-            label: None,
+            label: Some("PNG image staging buffer"),
             size: (row_pitch * data_height as usize) as u64,
             usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false
@@ -452,7 +452,7 @@ impl StafraBoardBindings
 
         let video_frame_buffer = device.create_buffer(&wgpu::BufferDescriptor
         {
-            label:              None,
+            label:              Some("Video frame staging buffer"),
             size:               (row_pitch * video_frame_height as usize) as u64,
             usage:              wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false

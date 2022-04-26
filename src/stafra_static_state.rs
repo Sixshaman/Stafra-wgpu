@@ -112,7 +112,7 @@ impl StafraStaticState
     {
         device.create_bind_group(&wgpu::BindGroupDescriptor
         {
-            label: None,
+            label: Some("Main render bind group"),
             layout: &self.main_render_bind_group_layout,
             entries:
             &[
@@ -135,7 +135,7 @@ impl StafraStaticState
     {
         device.create_bind_group(&wgpu::BindGroupDescriptor
         {
-            label: None,
+            label: Some("Click rule render bind group"),
             layout: &self.click_rule_render_bind_group_layout,
             entries:
             &[
@@ -158,7 +158,7 @@ impl StafraStaticState
     {
         device.create_bind_group(&wgpu::BindGroupDescriptor
         {
-            label: None,
+            label: Some("Clear default bind group"),
             layout: &self.clear_default_bind_group_layout,
             entries:
             &[
@@ -175,7 +175,7 @@ impl StafraStaticState
     {
         device.create_bind_group(&wgpu::BindGroupDescriptor
         {
-            label: None,
+            label: Some("Clear stability bind group"),
             layout: &self.clear_stability_bind_group_layout,
             entries:
             &[
@@ -192,7 +192,7 @@ impl StafraStaticState
     {
         device.create_bind_group(&wgpu::BindGroupDescriptor
         {
-            label: None,
+            label: Some("Clear restriction bind group"),
             layout: &self.clear_restriction_bind_group_layout,
             entries:
             &[
@@ -209,7 +209,7 @@ impl StafraStaticState
     {
         device.create_bind_group(&wgpu::BindGroupDescriptor
         {
-            label: None,
+            label: Some("Initial transform bind group"),
             layout: &self.initial_state_transform_bind_group_layout,
             entries:
             &[
@@ -232,7 +232,7 @@ impl StafraStaticState
     {
         device.create_bind_group(&wgpu::BindGroupDescriptor
         {
-            label: None,
+            label: Some("Initial restriction transform bind group"),
             layout: &self.initial_restriction_transform_bind_group_layout,
             entries:
             &[
@@ -255,7 +255,7 @@ impl StafraStaticState
     {
         device.create_bind_group(&wgpu::BindGroupDescriptor
         {
-            label: None,
+            label: Some("Filter restriction bind group"),
             layout: &self.filter_restriction_bind_group_layout,
             entries:
             &[
@@ -284,7 +284,7 @@ impl StafraStaticState
     {
         device.create_bind_group(&wgpu::BindGroupDescriptor
         {
-            label: None,
+            label: Some("Next step bind group"),
             layout: &self.next_step_bind_group_layout,
             entries:
             &[
@@ -331,7 +331,7 @@ impl StafraStaticState
     {
         device.create_bind_group(&wgpu::BindGroupDescriptor
         {
-            label: None,
+            label: Some("Bake click rule bind group"),
             layout: &self.bake_click_rule_bind_group_layout,
             entries:
             &[
@@ -354,8 +354,8 @@ impl StafraStaticState
     {
         device.create_bind_group(&wgpu::BindGroupDescriptor
         {
-            label:   None,
-            layout:  &self.final_state_transform_bind_group_layout,
+            label: Some("Final transform bind group"),
+            layout: &self.final_state_transform_bind_group_layout,
             entries:
             &[
                 wgpu::BindGroupEntry
@@ -383,7 +383,7 @@ impl StafraStaticState
     {
         device.create_bind_group(&wgpu::BindGroupDescriptor
         {
-            label: None,
+            label: Some("Generate mip bind group"),
             layout: &self.generate_mip_bind_group_layout,
             entries:
             &[
@@ -406,7 +406,7 @@ impl StafraStaticState
     {
         let mut main_render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor
         {
-            label: None,
+            label: Some("Main draw pass"),
             color_attachments:
             &[
                 wgpu::RenderPassColorAttachment
@@ -432,7 +432,7 @@ impl StafraStaticState
     {
         let mut click_rule_render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor
         {
-            label: None,
+            label: Some("Click rule draw pass"),
             color_attachments:
             &[
                 wgpu::RenderPassColorAttachment
@@ -456,84 +456,84 @@ impl StafraStaticState
 
     pub fn create_clear_stability_pass<'a>(&'a self, encoder: &'a mut wgpu::CommandEncoder) -> wgpu::ComputePass<'a>
     {
-        let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {label: None});
+        let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {label: Some("Clear stability pass")});
         pass.set_pipeline(&self.clear_stability_pipeline);
         pass
     }
 
     pub fn create_clear_restriction_pass<'a>(&'a self, encoder: &'a mut wgpu::CommandEncoder) -> wgpu::ComputePass<'a>
     {
-        let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {label: None});
+        let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {label: Some("Clear restriction pass")});
         pass.set_pipeline(&self.clear_restriction_pipeline);
         pass
     }
 
     pub fn create_clear_4_corners_pass<'a>(&'a self, encoder: &'a mut wgpu::CommandEncoder) -> wgpu::ComputePass<'a>
     {
-        let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {label: None});
+        let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {label: Some("Clear 4 corners pass")});
         pass.set_pipeline(&self.clear_4_corners_pipeline);
         pass
     }
 
     pub fn create_clear_4_sides_pass<'a>(&'a self, encoder: &'a mut wgpu::CommandEncoder) -> wgpu::ComputePass<'a>
     {
-        let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {label: None});
+        let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {label: Some("Clear 4 sides pass")});
         pass.set_pipeline(&self.clear_4_sides_pipeline);
         pass
     }
 
     pub fn create_clear_center_pass<'a>(&'a self, encoder: &'a mut wgpu::CommandEncoder) -> wgpu::ComputePass<'a>
     {
-        let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {label: None});
+        let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {label: Some("Clear center pass")});
         pass.set_pipeline(&self.clear_center_pipeline);
         pass
     }
 
     pub fn create_initial_transform_pass<'a>(&'a self, encoder: &'a mut wgpu::CommandEncoder) -> wgpu::ComputePass<'a>
     {
-        let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {label: None});
+        let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {label: Some("Initial transform pass")});
         pass.set_pipeline(&self.initial_state_transform_pipeline);
         pass
     }
 
     pub fn create_initial_restriction_transform_pass<'a>(&'a self, encoder: &'a mut wgpu::CommandEncoder) -> wgpu::ComputePass<'a>
     {
-        let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {label: None});
+        let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {label: Some("Initial restriction pass")});
         pass.set_pipeline(&self.initial_restriction_transform_pipeline);
         pass
     }
 
     pub fn create_filter_restriction_pass<'a>(&'a self, encoder: &'a mut wgpu::CommandEncoder) -> wgpu::ComputePass<'a>
     {
-        let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {label: None});
+        let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {label: Some("Filter restriction pass")});
         pass.set_pipeline(&self.filter_restriction_pipeline);
         pass
     }
 
     pub fn create_next_step_pass<'a>(&'a self, encoder: &'a mut wgpu::CommandEncoder) -> wgpu::ComputePass<'a>
     {
-        let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {label: None});
+        let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {label: Some("Next step pass")});
         pass.set_pipeline(&self.next_step_pipeline);
         pass
     }
 
     pub fn create_bake_click_rule_pass<'a>(&'a self, encoder: &'a mut wgpu::CommandEncoder) -> wgpu::ComputePass<'a>
     {
-        let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {label: None});
+        let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {label: Some("Bake click rule pass")});
         pass.set_pipeline(&self.bake_click_rule_pipeline);
         pass
     }
 
     pub fn create_generate_final_image_pass<'a>(&'a self, encoder: &'a mut wgpu::CommandEncoder) -> wgpu::ComputePass<'a>
     {
-        let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {label: None});
+        let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {label: Some("Generate final image pass")});
         pass.set_pipeline(&self.final_state_transform_pipeline);
         pass
     }
 
     pub fn create_generate_mip_pass<'a>(&'a self, encoder: &'a mut wgpu::CommandEncoder) -> wgpu::ComputePass<'a>
     {
-        let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {label: None});
+        let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {label: Some("Generate mip pass")});
         pass.set_pipeline(&self.generate_mip_pipeline);
         pass
     }
@@ -769,7 +769,7 @@ fn create_main_render_bind_group_layout(device: &wgpu::Device) -> wgpu::BindGrou
 {
     device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor
     {
-        label: None,
+        label: Some("Main render bind group layout"),
         entries:
         &[
             main_render_texture_binding!(0),
@@ -782,7 +782,7 @@ fn create_click_rule_render_bind_group_layout(device: &wgpu::Device) -> wgpu::Bi
 {
     device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor
     {
-        label: None,
+        label: Some("Click rule render bind group layout"),
         entries:
         &[
             click_rule_render_texture_binding!(0),
@@ -795,7 +795,7 @@ fn create_clear_default_bind_group_layout(device: &wgpu::Device) -> wgpu::BindGr
 {
     device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor
     {
-        label: None,
+        label: Some("Clear default bind group layout"),
         entries:
         &[
             board_image_binding!(0)
@@ -807,7 +807,7 @@ fn create_bake_click_rule_bind_group_layout(device: &wgpu::Device) -> wgpu::Bind
 {
     device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor
     {
-        label: None,
+        label: Some("Bake click rule bind group layout"),
         entries:
         &[
             board_texture_binding!(0),
@@ -820,7 +820,7 @@ fn create_initial_state_transform_bind_group_layout(device: &wgpu::Device) -> wg
 {
     device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor
     {
-        label: None,
+        label: Some("Initial state transform bind group layout"),
         entries:
         &[
             initial_texture_binding!(0),
@@ -833,7 +833,7 @@ fn create_initial_restriction_transform_bind_group_layout(device: &wgpu::Device)
 {
     device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor
     {
-        label: None,
+        label: Some("Initial restriction transform bind group layout"),
         entries:
         &[
             initial_texture_binding!(0),
@@ -846,7 +846,7 @@ fn create_filter_restriction_bind_group_layout(device: &wgpu::Device) -> wgpu::B
 {
     device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor
     {
-        label: None,
+        label: Some("Filter restriction bind group layout"),
         entries:
         &[
             board_texture_binding!(0),
@@ -860,7 +860,7 @@ fn create_final_state_transform_bind_group_layout(device: &wgpu::Device) -> wgpu
 {
     device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor
     {
-        label: None,
+        label: Some("Final state bind group layout"),
         entries:
         &[
             board_texture_binding!(0),
@@ -874,7 +874,7 @@ fn create_clear_stability_bind_group_layout(device: &wgpu::Device) -> wgpu::Bind
 {
     device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor
     {
-        label: None,
+        label: Some("Clear stability bind group layout"),
         entries:
         &[
             board_image_binding!(0),
@@ -886,7 +886,7 @@ fn create_clear_restriction_bind_group_layout(device: &wgpu::Device) -> wgpu::Bi
 {
     device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor
     {
-        label: None,
+        label: Some("Clear restriction bind group layout"),
         entries:
         &[
             board_image_binding!(0),
@@ -898,7 +898,7 @@ fn create_next_step_bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupL
 {
     device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor
     {
-        label: None,
+        label: Some("Next step bind group layout"),
         entries:
         &[
             board_texture_binding!(0),
@@ -918,7 +918,7 @@ fn create_generate_mip_bind_group_layout(device: &wgpu::Device) -> wgpu::BindGro
 {
     device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor
     {
-        label: None,
+        label: Some("Generate mip bind group layout"),
         entries:
         &[
             final_texture_mip_binding!(0),
@@ -931,7 +931,7 @@ fn create_clear_default_pipeline_layout(device: &wgpu::Device, clear_default_bin
 {
     device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor
     {
-        label: None,
+        label: Some("Clear default pipeline layout"),
         bind_group_layouts: &[&clear_default_bind_group_layout],
         push_constant_ranges: &[]
     })
@@ -944,14 +944,14 @@ fn create_main_render_pipeline(device: &wgpu::Device, main_render_bind_group_lay
 
     let main_render_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor
     {
-        label: None,
+        label: Some("Main render pipeline layout"),
         bind_group_layouts: &[&main_render_bind_group_layout],
         push_constant_ranges: &[],
     });
 
     device.create_render_pipeline(&wgpu::RenderPipelineDescriptor
     {
-        label: None,
+        label: Some("Main render pipeline"),
         layout: Some(&main_render_pipeline_layout),
 
         vertex: wgpu::VertexState
@@ -1001,14 +1001,14 @@ fn create_click_rule_render_pipeline(device: &wgpu::Device, click_rule_render_bi
 
     let render_click_rule_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor
     {
-        label: None,
+        label: Some("Render click rule pipeline layout"),
         bind_group_layouts: &[&click_rule_render_bind_group_layout],
         push_constant_ranges: &[],
     });
 
     device.create_render_pipeline(&wgpu::RenderPipelineDescriptor
     {
-        label: None,
+        label: Some("Render click rule pipeline"),
         layout: Some(&render_click_rule_pipeline_layout),
 
         vertex: wgpu::VertexState
@@ -1057,7 +1057,7 @@ fn create_clear_4_corners_pipeline(device: &wgpu::Device, clear_default_pipeline
 
     device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor
     {
-        label:       None,
+        label:       Some("Clear 4 corners pipeline"),
         layout:      Some(&clear_default_pipeline_layout),
         module:      &clear_4_corners_module,
         entry_point: "main"
@@ -1070,7 +1070,7 @@ fn create_clear_4_sides_pipeline(device: &wgpu::Device, clear_default_pipeline_l
 
     device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor
     {
-        label:       None,
+        label:       Some("Clear 4 sides pipeline"),
         layout:      Some(&clear_default_pipeline_layout),
         module:      &clear_4_sides_module,
         entry_point: "main"
@@ -1083,7 +1083,7 @@ fn create_clear_center_pipeline(device: &wgpu::Device, clear_default_pipeline_la
 
     device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor
     {
-        label:       None,
+        label:       Some("Clear center pipeline"),
         layout:      Some(&clear_default_pipeline_layout),
         module:      &clear_center_module,
         entry_point: "main"
@@ -1096,14 +1096,14 @@ fn create_clear_stability_pipeline(device: &wgpu::Device, clear_stability_bind_g
 
     let clear_stability_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor
     {
-        label: None,
+        label: Some("Clear stability pipeline layout"),
         bind_group_layouts: &[&clear_stability_bind_group_layout],
         push_constant_ranges: &[],
     });
 
     device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor
     {
-        label:       None,
+        label:       Some("Clear stability pipeline"),
         layout:      Some(&clear_stability_pipeline_layout),
         module:      &clear_stability_module,
         entry_point: "main"
@@ -1116,14 +1116,14 @@ fn create_clear_restriction_pipeline(device: &wgpu::Device, clear_restriction_bi
 
     let clear_restriction_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor
     {
-        label: None,
+        label: Some("Clear stability pipeline layout"),
         bind_group_layouts: &[&clear_restriction_bind_group_layout],
         push_constant_ranges: &[],
     });
 
     device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor
     {
-        label:       None,
+        label:       Some("Clear stability pipeline"),
         layout:      Some(&clear_restriction_pipeline_layout),
         module:      &clear_restriction_module,
         entry_point: "main"
@@ -1136,14 +1136,14 @@ fn create_initial_state_transform_pipeline(device: &wgpu::Device, initial_state_
 
     let initial_state_transform_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor
     {
-        label: None,
+        label: Some("Initial tranform pipeline layout"),
         bind_group_layouts: &[&initial_state_transform_bind_group_layout],
         push_constant_ranges: &[]
     });
 
     device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor
     {
-        label:       None,
+        label:       Some("Initial tranform pipeline"),
         layout:      Some(&initial_state_transform_pipeline_layout),
         module:      &initial_state_transform_module,
         entry_point: "main"
@@ -1156,14 +1156,14 @@ fn create_initial_restriction_transform_pipeline(device: &wgpu::Device, initial_
 
     let initial_restriction_transform_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor
     {
-        label: None,
+        label: Some("Initial restriction tranform pipeline layout"),
         bind_group_layouts: &[&initial_restriction_transform_bind_group_layout],
         push_constant_ranges: &[]
     });
 
     device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor
     {
-        label:       None,
+        label:       Some("Initial restriction tranform pipeline"),
         layout:      Some(&initial_restriction_transform_pipeline_layout),
         module:      &initial_restriction_transform_module,
         entry_point: "main"
@@ -1176,14 +1176,14 @@ fn create_filter_restriction_pipeline(device: &wgpu::Device, filter_restriction_
 
     let filter_restriction_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor
     {
-        label: None,
+        label: Some("Filter restriction pipeline layout"),
         bind_group_layouts: &[&filter_restriction_bind_group_layout],
         push_constant_ranges: &[]
     });
 
     device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor
     {
-        label:       None,
+        label:       Some("Filter restriction pipeline"),
         layout:      Some(&filter_restriction_pipeline_layout),
         module:      &filter_restriction_module,
         entry_point: "main"
@@ -1196,14 +1196,14 @@ fn create_next_step_pipeline(device: &wgpu::Device, next_step_bind_group_layout:
 
     let next_step_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor
     {
-        label: None,
+        label: Some("Next step pipeline layout"),
         bind_group_layouts: &[&next_step_bind_group_layout],
         push_constant_ranges: &[],
     });
 
     device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor
     {
-        label:       None,
+        label:       Some("Next step pipeline"),
         layout:      Some(&next_step_pipeline_layout),
         module:      &next_step_module,
         entry_point: "main"
@@ -1216,14 +1216,14 @@ fn create_bake_click_rule_pipeline(device: &wgpu::Device, bake_click_rule_bind_g
 
     let bake_click_rule_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor
     {
-        label: None,
+        label: Some("Bake click rule pipeline layout"),
         bind_group_layouts: &[&bake_click_rule_bind_group_layout],
         push_constant_ranges: &[]
     });
 
     device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor
     {
-        label:       None,
+        label:       Some("Bake click rule pipeline"),
         layout:      Some(&bake_click_rule_pipeline_layout),
         module:      &bake_click_rule_module,
         entry_point: "main"
@@ -1236,14 +1236,14 @@ fn create_final_state_transform_pipeline(device: &wgpu::Device, final_state_tran
 
     let final_state_transform_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor
     {
-        label: None,
+        label: Some("Final transform pipeline layout"),
         bind_group_layouts: &[&final_state_transform_bind_group_layout],
         push_constant_ranges: &[]
     });
 
     device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor
     {
-        label:       None,
+        label:       Some("Final transform pipeline"),
         layout:      Some(&final_state_transform_pipeline_layout),
         module:      &final_state_transform_module,
         entry_point: "main"
@@ -1256,14 +1256,14 @@ fn create_generate_mip_pipeline(device: &wgpu::Device, generate_mip_bind_group_l
 
     let generate_mip_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor
     {
-        label: None,
+        label: Some("Generate mip pipeline layout"),
         bind_group_layouts: &[&generate_mip_bind_group_layout],
         push_constant_ranges: &[],
     });
 
     device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor
     {
-        label:       None,
+        label:       Some("Generate mip pipeline"),
         layout:      Some(&generate_mip_pipeline_layout),
         module:      &generate_mip_module,
         entry_point: "main"
@@ -1274,7 +1274,7 @@ fn create_render_state_sampler(device: &wgpu::Device) -> wgpu::Sampler
 {
     device.create_sampler(&wgpu::SamplerDescriptor
     {
-        label:            None,
+        label:            Some("Render sampler"),
         address_mode_u:   wgpu::AddressMode::Repeat,
         address_mode_v:   wgpu::AddressMode::Repeat,
         address_mode_w:   wgpu::AddressMode::Repeat,

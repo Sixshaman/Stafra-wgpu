@@ -26,7 +26,7 @@ impl StafraStaticBindings
 
         let click_rule_texture_descriptor = wgpu::TextureDescriptor
         {
-            label: None,
+            label: Some("Click rule texture"),
             size:  wgpu::Extent3d
             {
                 width:                 click_rule_size,
@@ -42,7 +42,7 @@ impl StafraStaticBindings
 
         let click_rule_buffer_descriptor = wgpu::BufferDescriptor
         {
-            label:              None,
+            label:              Some("Click rule buffer"),
             size:               4 * std::mem::size_of::<i32>() as u64 + ((click_rule_size * click_rule_size * 2) as u64) * std::mem::size_of::<i32>() as u64,
             usage:              wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false
@@ -50,7 +50,7 @@ impl StafraStaticBindings
 
         let click_rule_render_flags_buffer_descriptor = wgpu::BufferDescriptor
         {
-            label:              None,
+            label:              Some("Click rule flags buffer"),
             size:               std::mem::size_of::<u32>() as u64,
             usage:              wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false
@@ -58,7 +58,7 @@ impl StafraStaticBindings
 
         let spawn_data_buffer_descriptor = wgpu::BufferDescriptor
         {
-            label:              None,
+            label:              Some("Spawn data buffer"),
             size:               2 * std::mem::size_of::<u32>() as u64,
             usage:              wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false
@@ -71,7 +71,7 @@ impl StafraStaticBindings
 
         let click_rule_texture_view_descriptor = wgpu::TextureViewDescriptor
         {
-            label:             None,
+            label:             Some("Click rule view"),
             format:            Some(wgpu::TextureFormat::R32Uint),
             dimension:         Some(wgpu::TextureViewDimension::D2),
             aspect:            wgpu::TextureAspect::All,

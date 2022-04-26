@@ -130,7 +130,7 @@ impl StafraState
         {
             features: wgpu::Features::default(),
             limits:   wgpu::Limits::default(),
-            label:    None,
+            label:    Some("Device"),
         },
         None).await.unwrap();
 
@@ -228,7 +228,7 @@ impl StafraState
             return;
         }
 
-        let mut buffer_copy_encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor{label: None});
+        let mut buffer_copy_encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor{label: Some("PNG buffer copy encoder")});
         let save_png_buffer = self.board_bindings.create_image_data_buffer(&self.device, &mut buffer_copy_encoder);
         self.queue.submit(std::iter::once(buffer_copy_encoder.finish()));
 
@@ -247,7 +247,7 @@ impl StafraState
 
     pub fn post_video_frame_request(&mut self)
     {
-        let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor{label: None});
+        let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor{label: Some("Video frame copy encoder")});
         self.board_bindings.render_video_frame(&mut encoder, &self.static_state);
 
         let video_frame_buffer = self.board_bindings.create_video_frame_data_buffer(&self.device, &mut encoder);
@@ -357,7 +357,7 @@ impl StafraState
 
     pub fn reset_board_unchanged(&mut self)
     {
-        let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor{label: None});
+        let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor{label: Some("Reset board unchanged encoder")});
         self.reset_board_unchanged_impl(&mut encoder);
         self.queue.submit(std::iter::once(encoder.finish()));
     }
@@ -380,7 +380,7 @@ impl StafraState
 
     pub fn reset_board_standard(&mut self, reset_type: StandardResetBoardType)
     {
-        let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor{label: None});
+        let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor{label: Some("Reset board standard encoder")});
         self.reset_board_standard_impl(&mut encoder, reset_type);
         self.queue.submit(std::iter::once(encoder.finish()));
     }
@@ -411,7 +411,7 @@ impl StafraState
 
         self.initial_state_bindings.upload_texture(&self.queue, image_array, width, height);
 
-        let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor{label: None});
+        let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor{label: Some("Reset board custom encoder")});
         self.reset_board_custom_impl(&mut encoder);
         self.queue.submit(std::iter::once(encoder.finish()));
 
@@ -432,7 +432,7 @@ impl StafraState
 
     pub fn upload_restriction(&mut self, image_array: Vec<u8>, width: u32, height: u32)
     {
-        let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor{label: None});
+        let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor{label: Some("Upload restriction encoder")});
 
         self.upload_restriction_impl(image_array, width, height);
 
@@ -445,7 +445,7 @@ impl StafraState
 
     pub fn clear_restriction(&mut self)
     {
-        let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor{label: None});
+        let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor{label: Some("Clear restriction encoder")});
 
         self.board_bindings.clear_restriction(&mut encoder, &self.static_state);
         self.reset_board_unchanged_impl(&mut encoder);
@@ -458,7 +458,7 @@ impl StafraState
         let cropped_size = (min(new_width, new_height) + 2).next_power_of_two() / 2 - 1;
         self.board_bindings = StafraBoardBindings::new(&self.device, &self.static_state, &self.static_bindings, &self.initial_state_bindings, cropped_size, cropped_size);
 
-        let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor{label: None});
+        let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor{label: Some("Resize board encoder")});
 
         if let Some(_) = &self.initial_restriction_tex
         {
@@ -477,7 +477,7 @@ impl StafraState
 
     pub fn reset_click_rule(&mut self, click_rule_data: &[u8; 32 * 32])
     {
-        let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor{label: None});
+        let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor{label: Some("Reset click rule encoder")});
         self.static_bindings.reset_click_rule(&self.queue, &mut encoder, &self.static_state, click_rule_data);
         self.queue.submit(std::iter::once(encoder.finish()));
     }
@@ -494,7 +494,7 @@ impl StafraState
 
     pub fn update(&mut self)
     {
-        let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor{label: None});
+        let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor{label: Some("Update encoder")});
 
         self.board_bindings.calc_next_frame(&mut encoder, &self.static_state, self.frame_number);
         self.board_bindings.generate_final_image(&mut encoder, &self.static_state, self.frame_number);
@@ -514,7 +514,7 @@ impl StafraState
         let main_frame_view       = main_frame.texture.create_view(&wgpu::TextureViewDescriptor::default());
         let click_rule_frame_view = click_rule_frame.texture.create_view(&wgpu::TextureViewDescriptor::default());
 
-        let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor{label: None});
+        let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor{label: Some("Render encoder")});
 
         self.board_bindings.draw_main_state(&mut encoder, &main_frame_view, &self.static_state);
         self.static_bindings.draw_click_rule(&mut encoder, &click_rule_frame_view, &self.static_state);
@@ -531,7 +531,7 @@ impl StafraState
     {
         let restriction_texture_descriptor = wgpu::TextureDescriptor
         {
-            label: None,
+            label: Some("Restriction texture"),
             size:  wgpu::Extent3d
             {
                 width,
