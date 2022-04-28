@@ -372,20 +372,36 @@ fn create_next_frame_closure(app_state_rc: Rc<RefCell<app_state::AppState>>, sta
         let mut app_state    = app_state_rc.borrow_mut();
         let mut stafra_state = stafra_state_rc.borrow_mut();
 
-        if app_state.run_state == RunState::PausedRecording && !stafra_state.video_frame_queue_full()
+        match app_state.run_state
         {
-            stafra_state.update();
-            stafra_state.post_video_frame_request();
+            RunState::PausedRecording => if !stafra_state.video_frame_queue_full()
+            {
+                stafra_state.update();
+                stafra_state.post_video_frame_request();
 
-            update_next_frame_button_paused_recording(!stafra_state.video_frame_queue_full());
-            if app_state.last_frame == stafra_state.frame_number()
+                update_next_frame_button_paused_recording(!stafra_state.video_frame_queue_full());
+                if app_state.last_frame == stafra_state.frame_number()
+                {
+                    app_state.run_state = RunState::Paused;
+                }
+            }
+
+            RunState::Paused =>
+            {
+                stafra_state.update();
+            }
+
+            RunState::Stopped =>
             {
                 app_state.run_state = RunState::Paused;
+                update_ui(app_state.run_state);
+
+                //Update twice to properly initialize the first frame
+                stafra_state.update();
+                stafra_state.update();
             }
-        }
-        else if app_state.run_state == RunState::Paused && app_state.run_state == RunState::Stopped
-        {
-            stafra_state.update();
+
+            _ => {}
         }
     }) as Box<dyn Fn()>);
 
