@@ -5,6 +5,11 @@ fn main(@builtin(global_invocation_id) global_thread_id: vec3<u32>)
 {
     let board_size: vec2<i32> = textureDimensions(out_initial_board);
 
+	if(global_thread_id.x >= u32(board_size.x) || global_thread_id.y >= u32(board_size.y))
+	{
+	    return;
+	}
+
     let center        = vec2<u32>(u32(board_size.x - 1) / 2u, u32(board_size.y - 1) / 2u);
     let inside_center = u32(all(global_thread_id.xy == center));
 

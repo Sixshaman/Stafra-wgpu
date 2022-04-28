@@ -276,6 +276,11 @@ fn main(@builtin(local_invocation_id) local_thread_id: vec3<u32>, @builtin(globa
 
     workgroupBarrier();
 
+    if(global_thread_id.x >= u32(board_size.x) || global_thread_id.y >= u32(board_size.y))
+    {
+        return;
+    }
+
     let modulo_2_mask: u32 = 0x01010101u & this_quad_mask;
     let packed_element_count = i32(element_count / 2u);
 
