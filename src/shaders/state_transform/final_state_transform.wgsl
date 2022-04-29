@@ -4,8 +4,10 @@
 struct SpawnData
 {
     spawn_period:     u32,
-    smooth_transform: u32
+    spawn_data_flags: u32
 };
+
+let FlagSmoothTransform: u32 = 0x01u;
 
 @group(0) @binding(0) var          final_board:   texture_2d<u32>;
 @group(0) @binding(1) var          out_tex_mip_0: texture_storage_2d<rgba8unorm, write>;
@@ -22,7 +24,7 @@ fn main(@builtin(global_invocation_id) global_thread_id: vec3<u32>)
 
     //0 -> spawn period, 1 -> 0, 2 -> 1, ...
     final_stability_quad = clamp(final_stability_quad - vec4<u32>(1u), vec4<u32>(0u), vec4<u32>(spawn_data.spawn_period));
-    if(spawn_data.smooth_transform == 0u)
+    if((spawn_data.spawn_data_flags & FlagSmoothTransform) == 0u)
     {
         let tex_value = vec4<f32>(final_stability_quad == vec4<u32>(spawn_data.spawn_period));
         textureStore(out_tex_mip_0, vec2<i32>(global_thread_id.xy), tex_value);

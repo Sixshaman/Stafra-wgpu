@@ -140,6 +140,8 @@ pub async fn run_event_loop()
             stafra_state.resize_click_rule(current_click_rule_canvas_width as u32, current_click_rule_canvas_height as u32);
         }
 
+        stafra_state.update_visual_info();
+
         //Display state
         match stafra_state.render()
         {
@@ -257,7 +259,7 @@ fn create_click_rule_change_closure(app_state_rc: Rc<RefCell<app_state::AppState
             query_string.set("click_rule", &app_state.encode_click_rule_base64());
 
             let new_search_state = window.location().pathname().unwrap() + "?" + &query_string.to_string().as_string().unwrap();
-            window.history().unwrap().replace_state_with_url(&wasm_bindgen::JsValue::NULL, "", Some(&new_search_state)).unwrap();
+            window.history().unwrap().replace_state_with_url(&JsValue::NULL, "", Some(&new_search_state)).unwrap();
         }
     })
     as Box<dyn Fn(web_sys::Event)>);
@@ -450,7 +452,7 @@ fn create_enable_last_frame_closure(app_state_rc: Rc<RefCell<app_state::AppState
         }
 
         let new_search_state = window.location().pathname().unwrap() + "?" + &query_string.to_string().as_string().unwrap();
-        window.history().unwrap().replace_state_with_url(&wasm_bindgen::JsValue::NULL, "", Some(&new_search_state)).unwrap();
+        window.history().unwrap().replace_state_with_url(&JsValue::NULL, "", Some(&new_search_state)).unwrap();
 
         video_record_state.set_frame_limit(app_state.last_frame);
 
@@ -499,7 +501,7 @@ fn create_enable_spawn_closure(stafra_state_rc: Rc<RefCell<stafra_state::StafraS
         }
 
         let new_search_state = window.location().pathname().unwrap() + "?" + &query_string.to_string().as_string().unwrap();
-        window.history().unwrap().replace_state_with_url(&wasm_bindgen::JsValue::NULL, "", Some(&new_search_state)).unwrap();
+        window.history().unwrap().replace_state_with_url(&JsValue::NULL, "", Some(&new_search_state)).unwrap();
 
     }) as Box<dyn Fn(web_sys::Event)>);
 
@@ -533,7 +535,7 @@ fn create_decrement_spawn_closure(stafra_state_rc: Rc<RefCell<stafra_state::Staf
         stafra_state.set_spawn_period(new_spawn_period);
 
         let new_search_state = window.location().pathname().unwrap() + "?" + &query_string.to_string().as_string().unwrap();
-        window.history().unwrap().replace_state_with_url(&wasm_bindgen::JsValue::NULL, "", Some(&new_search_state)).unwrap();
+        window.history().unwrap().replace_state_with_url(&JsValue::NULL, "", Some(&new_search_state)).unwrap();
 
     }) as Box<dyn Fn()>);
 
@@ -567,7 +569,7 @@ fn create_increment_spawn_closure(stafra_state_rc: Rc<RefCell<stafra_state::Staf
         stafra_state.set_spawn_period(new_spawn_period);
 
         let new_search_state = window.location().pathname().unwrap() + "?" + &query_string.to_string().as_string().unwrap();
-        window.history().unwrap().replace_state_with_url(&wasm_bindgen::JsValue::NULL, "", Some(&new_search_state)).unwrap();
+        window.history().unwrap().replace_state_with_url(&JsValue::NULL, "", Some(&new_search_state)).unwrap();
 
     }) as Box<dyn Fn()>);
 
@@ -589,7 +591,7 @@ fn create_change_spawn_closure(stafra_state_rc: Rc<RefCell<stafra_state::StafraS
         query_string.set("spawn_period", &spawn_value.as_string().unwrap());
 
         let new_search_state = window.location().pathname().unwrap() + "?" + &query_string.to_string().as_string().unwrap();
-        window.history().unwrap().replace_state_with_url(&wasm_bindgen::JsValue::NULL, "", Some(&new_search_state)).unwrap();
+        window.history().unwrap().replace_state_with_url(&JsValue::NULL, "", Some(&new_search_state)).unwrap();
 
     }) as Box<dyn FnMut(&JsValue)>);
 
@@ -640,7 +642,7 @@ fn create_change_smooth_transform_closure(stafra_state_rc: Rc<RefCell<stafra_sta
         }
 
         let new_search_state = window.location().pathname().unwrap() + "?" + &query_string.to_string().as_string().unwrap();
-        window.history().unwrap().replace_state_with_url(&wasm_bindgen::JsValue::NULL, "", Some(&new_search_state)).unwrap();
+        window.history().unwrap().replace_state_with_url(&JsValue::NULL, "", Some(&new_search_state)).unwrap();
 
     }) as Box<dyn Fn(web_sys::Event)>);
 
@@ -675,7 +677,7 @@ fn create_change_last_frame_closure(app_state_rc: Rc<RefCell<app_state::AppState
         }
 
         let new_search_state = window.location().pathname().unwrap() + "?" + &query_string.to_string().as_string().unwrap();
-        window.history().unwrap().replace_state_with_url(&wasm_bindgen::JsValue::NULL, "", Some(&new_search_state)).unwrap();
+        window.history().unwrap().replace_state_with_url(&JsValue::NULL, "", Some(&new_search_state)).unwrap();
 
         video_record_state.set_frame_limit(app_state.last_frame);
 
@@ -921,7 +923,7 @@ fn create_select_initial_state_closure(stafra_state_rc: Rc<RefCell<stafra_state:
         }
 
         let new_search_state = window.location().pathname().unwrap() + "?" + &query_string.to_string().as_string().unwrap();
-        window.history().unwrap().replace_state_with_url(&wasm_bindgen::JsValue::NULL, "", Some(&new_search_state)).unwrap();
+        window.history().unwrap().replace_state_with_url(&JsValue::NULL, "", Some(&new_search_state)).unwrap();
 
     }) as Box<dyn Fn(web_sys::Event)>);
 
@@ -954,7 +956,7 @@ fn create_select_size_closure(app_state_rc: Rc<RefCell<app_state::AppState>>, st
         query_string.set("size_index", &board_size_selected_index.to_string());
 
         let new_search_state = window.location().pathname().unwrap() + "?" + &query_string.to_string().as_string().unwrap();
-        window.history().unwrap().replace_state_with_url(&wasm_bindgen::JsValue::NULL, "", Some(&new_search_state)).unwrap();
+        window.history().unwrap().replace_state_with_url(&JsValue::NULL, "", Some(&new_search_state)).unwrap();
 
     }) as Box<dyn Fn(web_sys::Event)>);
 

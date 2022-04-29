@@ -422,8 +422,8 @@ impl StafraBoardBindings
             layout: wgpu::ImageDataLayout
             {
                offset:         0,
-               bytes_per_row:  std::num::NonZeroU32::new(row_pitch as u32),
-               rows_per_image: std::num::NonZeroU32::new(data_height)
+               bytes_per_row:  NonZeroU32::new(row_pitch as u32),
+               rows_per_image: NonZeroU32::new(data_height)
             }
         },
         wgpu::Extent3d
@@ -476,8 +476,8 @@ impl StafraBoardBindings
             layout: wgpu::ImageDataLayout
             {
                offset:         0,
-               bytes_per_row:  std::num::NonZeroU32::new(row_pitch as u32),
-               rows_per_image: std::num::NonZeroU32::new(video_frame_height)
+               bytes_per_row:  NonZeroU32::new(row_pitch as u32),
+               rows_per_image: NonZeroU32::new(video_frame_height)
             }
         },
         wgpu::Extent3d
@@ -519,35 +519,35 @@ impl StafraBoardBindings
                     }
 
                     //Decode the quad
-                    let top_left     = quad_bytes[0] as f32;
-                    let top_right    = quad_bytes[1] as f32;
-                    let bottom_left  = quad_bytes[2] as f32;
-                    let bottom_right = quad_bytes[3] as f32;
+                    let top_left     = quad_bytes[0];
+                    let top_right    = quad_bytes[1];
+                    let bottom_left  = quad_bytes[2];
+                    let bottom_right = quad_bytes[3];
 
                     let top_left_texel_start     = (((image_row_index + 0) * image_width + image_column_index + 0) * 4) as usize;
                     let top_right_texel_start    = (((image_row_index + 0) * image_width + image_column_index + 1) * 4) as usize;
                     let bottom_left_texel_start  = (((image_row_index + 1) * image_width + image_column_index + 0) * 4) as usize;
                     let bottom_right_texel_start = (((image_row_index + 1) * image_width + image_column_index + 1) * 4) as usize;
 
-                    image_array[bottom_right_texel_start + 0] = (bottom_right * 255.0) as u8; //Red
-                    image_array[bottom_right_texel_start + 1] = 0u8;                          //Green
-                    image_array[bottom_right_texel_start + 2] = (bottom_right * 255.0) as u8; //Blue
-                    image_array[bottom_right_texel_start + 3] = 255u8;                        //Alpha
+                    image_array[bottom_right_texel_start + 0] = bottom_right; //Red
+                    image_array[bottom_right_texel_start + 1] = 0u8;          //Green
+                    image_array[bottom_right_texel_start + 2] = bottom_right; //Blue
+                    image_array[bottom_right_texel_start + 3] = 255u8;        //Alpha
 
-                    image_array[top_right_texel_start + 0] = (top_right * 255.0) as u8; //Red
-                    image_array[top_right_texel_start + 1] = 0u8;                       //Green
-                    image_array[top_right_texel_start + 2] = (top_right * 255.0) as u8; //Blue
-                    image_array[top_right_texel_start + 3] = 255u8;                     //Alpha
+                    image_array[top_right_texel_start + 0] = top_right; //Red
+                    image_array[top_right_texel_start + 1] = 0u8;       //Green
+                    image_array[top_right_texel_start + 2] = top_right; //Blue
+                    image_array[top_right_texel_start + 3] = 255u8;     //Alpha
 
-                    image_array[bottom_left_texel_start + 0] = (bottom_left * 255.0) as u8; //Red
-                    image_array[bottom_left_texel_start + 1] = 0u8;                         //Green
-                    image_array[bottom_left_texel_start + 2] = (bottom_left * 255.0) as u8; //Blue
-                    image_array[bottom_left_texel_start + 3] = 255u8;                       //Alpha
+                    image_array[bottom_left_texel_start + 0] = bottom_left; //Red
+                    image_array[bottom_left_texel_start + 1] = 0u8;         //Green
+                    image_array[bottom_left_texel_start + 2] = bottom_left; //Blue
+                    image_array[bottom_left_texel_start + 3] = 255u8;       //Alpha
 
-                    image_array[top_left_texel_start + 0] = (top_left * 255.0) as u8; //Red
-                    image_array[top_left_texel_start + 1] = 0u8;                      //Green
-                    image_array[top_left_texel_start + 2] = (top_left * 255.0) as u8; //Blue
-                    image_array[top_left_texel_start + 3] = 255u8;                    //Alpha
+                    image_array[top_left_texel_start + 0] = top_left; //Red
+                    image_array[top_left_texel_start + 1] = 0u8;      //Green
+                    image_array[top_left_texel_start + 2] = top_left; //Blue
+                    image_array[top_left_texel_start + 3] = 255u8;    //Alpha
                 }
             }
         }

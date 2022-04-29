@@ -175,7 +175,7 @@ impl StafraState
             frame_number: 0,
 
             save_png_request:          None,
-            video_frame_request_queue: std::collections::vec_deque::VecDeque::with_capacity(max_video_frame_requests),
+            video_frame_request_queue: VecDeque::with_capacity(max_video_frame_requests),
             last_reset_type:           ResetBoardType::Standard{reset_type: StandardResetBoardType::Corners},
 
             initial_restriction_tex: None,
@@ -499,11 +499,14 @@ impl StafraState
         self.board_bindings.calc_next_frame(&mut encoder, &self.static_state, self.frame_number);
         self.board_bindings.generate_final_image(&mut encoder, &self.static_state, self.frame_number);
 
-        self.static_bindings.update_draw_state(&self.queue);
-
         self.frame_number += 1;
 
         self.queue.submit(std::iter::once(encoder.finish()));
+    }
+
+    pub fn update_visual_info(&mut self)
+    {
+        self.static_bindings.update_draw_state(&self.queue);
     }
 
     pub fn render(&mut self) -> Result<(), wgpu::SurfaceError>
