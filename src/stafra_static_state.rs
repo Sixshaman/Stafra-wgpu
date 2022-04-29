@@ -1136,14 +1136,14 @@ fn create_initial_state_transform_pipeline(device: &wgpu::Device, initial_state_
 
     let initial_state_transform_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor
     {
-        label: Some("Initial tranform pipeline layout"),
+        label: Some("Initial transform pipeline layout"),
         bind_group_layouts: &[&initial_state_transform_bind_group_layout],
         push_constant_ranges: &[]
     });
 
     device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor
     {
-        label:       Some("Initial tranform pipeline"),
+        label:       Some("Initial transform pipeline"),
         layout:      Some(&initial_state_transform_pipeline_layout),
         module:      &initial_state_transform_module,
         entry_point: "main"
@@ -1156,14 +1156,14 @@ fn create_initial_restriction_transform_pipeline(device: &wgpu::Device, initial_
 
     let initial_restriction_transform_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor
     {
-        label: Some("Initial restriction tranform pipeline layout"),
+        label: Some("Initial restriction transform pipeline layout"),
         bind_group_layouts: &[&initial_restriction_transform_bind_group_layout],
         push_constant_ranges: &[]
     });
 
     device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor
     {
-        label:       Some("Initial restriction tranform pipeline"),
+        label:       Some("Initial restriction transform pipeline"),
         layout:      Some(&initial_restriction_transform_pipeline_layout),
         module:      &initial_restriction_transform_module,
         entry_point: "main"
