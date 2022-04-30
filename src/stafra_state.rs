@@ -119,13 +119,20 @@ impl StafraState
 
     async fn new_impl(instance: wgpu::Instance, main_surface: wgpu::Surface, click_rule_surface: wgpu::Surface, window_width: u32, window_height: u32, click_rule_width: u32, click_rule_height: u32, board_width: u32, board_height: u32) -> Self
     {
-        let adapter = instance.request_adapter(&wgpu::RequestAdapterOptions
+        let adapter_option = instance.request_adapter(&wgpu::RequestAdapterOptions
         {
             power_preference:       wgpu::PowerPreference::default(),
             force_fallback_adapter: false,
             compatible_surface:     Some(&main_surface),
-        }).await.unwrap();
+        }).await;
 
+        #[cfg(target_arch = "wasm32")]
+        if let None = adapter_option
+        {
+            web_sys::window().unwrap().alert_with_message("Wgpu is not supported").unwrap();
+        }
+
+        let adapter = adapter_option.unwrap();
         let (device, queue) = adapter.request_device(&wgpu::DeviceDescriptor
         {
             features: wgpu::Features::default(),
