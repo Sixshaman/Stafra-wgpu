@@ -409,7 +409,7 @@ impl StafraStaticState
             label: Some("Main draw pass"),
             color_attachments:
             &[
-                wgpu::RenderPassColorAttachment
+                Some(wgpu::RenderPassColorAttachment
                 {
                     view:           &main_frame_view,
                     resolve_target: None,
@@ -418,7 +418,7 @@ impl StafraStaticState
                         load:  wgpu::LoadOp::Clear(wgpu::Color::GREEN),
                         store: true,
                     },
-                }
+                })
             ],
 
             depth_stencil_attachment: None,
@@ -435,7 +435,7 @@ impl StafraStaticState
             label: Some("Click rule draw pass"),
             color_attachments:
             &[
-                wgpu::RenderPassColorAttachment
+                Some(wgpu::RenderPassColorAttachment
                 {
                     view: &click_rule_frame_view,
                     resolve_target: None,
@@ -444,7 +444,7 @@ impl StafraStaticState
                         load:  wgpu::LoadOp::Clear(wgpu::Color::BLACK),
                         store: true,
                     }
-                }
+                })
             ],
 
             depth_stencil_attachment: None
@@ -939,8 +939,8 @@ fn create_clear_default_pipeline_layout(device: &wgpu::Device, clear_default_bin
 
 fn create_main_render_pipeline(device: &wgpu::Device, main_render_bind_group_layout: &wgpu::BindGroupLayout, swapchain_format: wgpu::TextureFormat) -> wgpu::RenderPipeline
 {
-    let main_render_state_vs_module = device.create_shader_module(&wgpu::include_wgsl!("shaders/render/render_state_vs.wgsl"));
-    let main_render_state_fs_module = device.create_shader_module(&wgpu::include_wgsl!("shaders/render/render_state_fs.wgsl"));
+    let main_render_state_vs_module = device.create_shader_module(wgpu::include_wgsl!("shaders/render/render_state_vs.wgsl"));
+    let main_render_state_fs_module = device.create_shader_module(wgpu::include_wgsl!("shaders/render/render_state_fs.wgsl"));
 
     let main_render_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor
     {
@@ -967,12 +967,12 @@ fn create_main_render_pipeline(device: &wgpu::Device, main_render_bind_group_lay
             entry_point: "main",
             targets:
             &[
-                wgpu::ColorTargetState
+                Some(wgpu::ColorTargetState
                 {
                     format:     swapchain_format,
                     blend:      None,
                     write_mask: wgpu::ColorWrites::ALL,
-                }
+                })
             ],
         }),
 
@@ -996,8 +996,8 @@ fn create_main_render_pipeline(device: &wgpu::Device, main_render_bind_group_lay
 
 fn create_click_rule_render_pipeline(device: &wgpu::Device, click_rule_render_bind_group_layout: &wgpu::BindGroupLayout, swapchain_format: wgpu::TextureFormat) -> wgpu::RenderPipeline
 {
-    let render_click_rule_vs_module = device.create_shader_module(&wgpu::include_wgsl!("shaders/render/click_rule_render_state_vs.wgsl"));
-    let render_click_rule_fs_module = device.create_shader_module(&wgpu::include_wgsl!("shaders/render/click_rule_render_state_fs.wgsl"));
+    let render_click_rule_vs_module = device.create_shader_module(wgpu::include_wgsl!("shaders/render/click_rule_render_state_vs.wgsl"));
+    let render_click_rule_fs_module = device.create_shader_module(wgpu::include_wgsl!("shaders/render/click_rule_render_state_fs.wgsl"));
 
     let render_click_rule_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor
     {
@@ -1024,12 +1024,12 @@ fn create_click_rule_render_pipeline(device: &wgpu::Device, click_rule_render_bi
             entry_point: "main",
             targets:
             &[
-                wgpu::ColorTargetState
+                Some(wgpu::ColorTargetState
                 {
                     format:     swapchain_format,
                     blend:      None,
                     write_mask: wgpu::ColorWrites::ALL,
-                }
+                })
             ],
         }),
 
@@ -1053,7 +1053,7 @@ fn create_click_rule_render_pipeline(device: &wgpu::Device, click_rule_render_bi
 
 fn create_clear_4_corners_pipeline(device: &wgpu::Device, clear_default_pipeline_layout: &wgpu::PipelineLayout) -> wgpu::ComputePipeline
 {
-    let clear_4_corners_module = device.create_shader_module(&wgpu::include_wgsl!("shaders/clear_board/clear_4_corners.wgsl"));
+    let clear_4_corners_module = device.create_shader_module(wgpu::include_wgsl!("shaders/clear_board/clear_4_corners.wgsl"));
 
     device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor
     {
@@ -1066,7 +1066,7 @@ fn create_clear_4_corners_pipeline(device: &wgpu::Device, clear_default_pipeline
 
 fn create_clear_4_sides_pipeline(device: &wgpu::Device, clear_default_pipeline_layout: &wgpu::PipelineLayout) -> wgpu::ComputePipeline
 {
-    let clear_4_sides_module = device.create_shader_module(&wgpu::include_wgsl!("shaders/clear_board/clear_4_sides.wgsl"));
+    let clear_4_sides_module = device.create_shader_module(wgpu::include_wgsl!("shaders/clear_board/clear_4_sides.wgsl"));
 
     device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor
     {
@@ -1079,7 +1079,7 @@ fn create_clear_4_sides_pipeline(device: &wgpu::Device, clear_default_pipeline_l
 
 fn create_clear_center_pipeline(device: &wgpu::Device, clear_default_pipeline_layout: &wgpu::PipelineLayout) -> wgpu::ComputePipeline
 {
-    let clear_center_module = device.create_shader_module(&wgpu::include_wgsl!("shaders/clear_board/clear_center.wgsl"));
+    let clear_center_module = device.create_shader_module(wgpu::include_wgsl!("shaders/clear_board/clear_center.wgsl"));
 
     device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor
     {
@@ -1092,7 +1092,7 @@ fn create_clear_center_pipeline(device: &wgpu::Device, clear_default_pipeline_la
 
 fn create_clear_stability_pipeline(device: &wgpu::Device, clear_stability_bind_group_layout: &wgpu::BindGroupLayout) -> wgpu::ComputePipeline
 {
-    let clear_stability_module = device.create_shader_module(&wgpu::include_wgsl!("shaders/state_transform/clear_stability.wgsl"));
+    let clear_stability_module = device.create_shader_module(wgpu::include_wgsl!("shaders/state_transform/clear_stability.wgsl"));
 
     let clear_stability_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor
     {
@@ -1112,7 +1112,7 @@ fn create_clear_stability_pipeline(device: &wgpu::Device, clear_stability_bind_g
 
 fn create_clear_restriction_pipeline(device: &wgpu::Device, clear_restriction_bind_group_layout: &wgpu::BindGroupLayout) -> wgpu::ComputePipeline
 {
-    let clear_restriction_module = device.create_shader_module(&wgpu::include_wgsl!("shaders/state_transform/clear_restriction.wgsl"));
+    let clear_restriction_module = device.create_shader_module(wgpu::include_wgsl!("shaders/state_transform/clear_restriction.wgsl"));
 
     let clear_restriction_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor
     {
@@ -1132,7 +1132,7 @@ fn create_clear_restriction_pipeline(device: &wgpu::Device, clear_restriction_bi
 
 fn create_initial_state_transform_pipeline(device: &wgpu::Device, initial_state_transform_bind_group_layout: &wgpu::BindGroupLayout) -> wgpu::ComputePipeline
 {
-    let initial_state_transform_module = device.create_shader_module(&wgpu::include_wgsl!("shaders/state_transform/initial_state_transform.wgsl"));
+    let initial_state_transform_module = device.create_shader_module(wgpu::include_wgsl!("shaders/state_transform/initial_state_transform.wgsl"));
 
     let initial_state_transform_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor
     {
@@ -1152,7 +1152,7 @@ fn create_initial_state_transform_pipeline(device: &wgpu::Device, initial_state_
 
 fn create_initial_restriction_transform_pipeline(device: &wgpu::Device, initial_restriction_transform_bind_group_layout: &wgpu::BindGroupLayout) -> wgpu::ComputePipeline
 {
-    let initial_restriction_transform_module = device.create_shader_module(&wgpu::include_wgsl!("shaders/state_transform/initial_restriction_transform.wgsl"));
+    let initial_restriction_transform_module = device.create_shader_module(wgpu::include_wgsl!("shaders/state_transform/initial_restriction_transform.wgsl"));
 
     let initial_restriction_transform_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor
     {
@@ -1172,7 +1172,7 @@ fn create_initial_restriction_transform_pipeline(device: &wgpu::Device, initial_
 
 fn create_filter_restriction_pipeline(device: &wgpu::Device, filter_restriction_bind_group_layout: &wgpu::BindGroupLayout) -> wgpu::ComputePipeline
 {
-    let filter_restriction_module = device.create_shader_module(&wgpu::include_wgsl!("shaders/state_transform/filter_restriction.wgsl"));
+    let filter_restriction_module = device.create_shader_module(wgpu::include_wgsl!("shaders/state_transform/filter_restriction.wgsl"));
 
     let filter_restriction_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor
     {
@@ -1192,7 +1192,7 @@ fn create_filter_restriction_pipeline(device: &wgpu::Device, filter_restriction_
 
 fn create_next_step_pipeline(device: &wgpu::Device, next_step_bind_group_layout: &wgpu::BindGroupLayout) -> wgpu::ComputePipeline
 {
-    let next_step_module = device.create_shader_module(&wgpu::include_wgsl!("shaders/next_step/next_step.wgsl"));
+    let next_step_module = device.create_shader_module(wgpu::include_wgsl!("shaders/next_step/next_step.wgsl"));
 
     let next_step_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor
     {
@@ -1212,7 +1212,7 @@ fn create_next_step_pipeline(device: &wgpu::Device, next_step_bind_group_layout:
 
 fn create_bake_click_rule_pipeline(device: &wgpu::Device, bake_click_rule_bind_group_layout: &wgpu::BindGroupLayout) -> wgpu::ComputePipeline
 {
-    let bake_click_rule_module = device.create_shader_module(&wgpu::include_wgsl!("shaders/click_rule/bake_click_rule.wgsl"));
+    let bake_click_rule_module = device.create_shader_module(wgpu::include_wgsl!("shaders/click_rule/bake_click_rule.wgsl"));
 
     let bake_click_rule_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor
     {
@@ -1232,7 +1232,7 @@ fn create_bake_click_rule_pipeline(device: &wgpu::Device, bake_click_rule_bind_g
 
 fn create_final_state_transform_pipeline(device: &wgpu::Device, final_state_transform_bind_group_layout: &wgpu::BindGroupLayout) -> wgpu::ComputePipeline
 {
-    let final_state_transform_module = device.create_shader_module(&wgpu::include_wgsl!("shaders/state_transform/final_state_transform.wgsl"));
+    let final_state_transform_module = device.create_shader_module(wgpu::include_wgsl!("shaders/state_transform/final_state_transform.wgsl"));
 
     let final_state_transform_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor
     {
@@ -1252,7 +1252,7 @@ fn create_final_state_transform_pipeline(device: &wgpu::Device, final_state_tran
 
 fn create_generate_mip_pipeline(device: &wgpu::Device, generate_mip_bind_group_layout: &wgpu::BindGroupLayout) -> wgpu::ComputePipeline
 {
-    let generate_mip_module = device.create_shader_module(&wgpu::include_wgsl!("shaders/mip/final_state_generate_next_mip.wgsl"));
+    let generate_mip_module = device.create_shader_module(wgpu::include_wgsl!("shaders/mip/final_state_generate_next_mip.wgsl"));
 
     let generate_mip_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor
     {

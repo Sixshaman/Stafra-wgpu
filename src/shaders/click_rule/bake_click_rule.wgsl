@@ -1,5 +1,5 @@
-let click_rule_width  = 32u;
-let click_rule_height = 32u;
+const click_rule_width  = 32u;
+const click_rule_height = 32u;
 
 struct ClickRuleData
 {
@@ -12,7 +12,7 @@ struct ClickRuleData
 @group(0) @binding(0) var                      click_rule_tex:  texture_2d<u32>;
 @group(0) @binding(1) var<storage, read_write> click_rule_data: ClickRuleData;
 
-@stage(compute) @workgroup_size(8, 8)
+@compute @workgroup_size(8, 8)
 fn main(@builtin(global_invocation_id) global_thread_id: vec3<u32>)
 {
     if(any(global_thread_id.xy > vec2<u32>(click_rule_width - 1u, click_rule_height - 1u)))

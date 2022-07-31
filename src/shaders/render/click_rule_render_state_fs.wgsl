@@ -4,8 +4,8 @@ struct FsInput
     @location(0)       texcoord:      vec2<f32>
 };
 
-let FlagDrawOverlay:     u32 = 0x01u;
-let FlagChangesDisabled: u32 = 0x02u;
+const FlagDrawOverlay:     u32 = 0x01u;
+const FlagChangesDisabled: u32 = 0x02u;
 
 struct ClickRuleFlags
 {
@@ -15,7 +15,7 @@ struct ClickRuleFlags
 @group(0) @binding(0) var          click_rule:       texture_2d<u32>;
 @group(0) @binding(1) var<uniform> click_rule_flags: ClickRuleFlags;
 
-@stage(fragment)
+@fragment
 fn main(fin: FsInput) -> @location(0) vec4<f32>
 {
     let click_rule_size        = vec2<f32>(textureDimensions(click_rule));

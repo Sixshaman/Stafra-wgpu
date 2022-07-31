@@ -224,7 +224,7 @@ impl StafraBoardBindings
         {
             let mut filter_restriction_pass = static_state.create_filter_restriction_pass(encoder);
             filter_restriction_pass.set_bind_group(0, &self.filter_restriction_bind_group, &[]);
-            filter_restriction_pass.dispatch(thread_groups_x, thread_groups_y, 1);
+            filter_restriction_pass.dispatch_workgroups(thread_groups_x, thread_groups_y, 1);
         }
     }
 
@@ -236,13 +236,13 @@ impl StafraBoardBindings
         {
             let mut clear_stability_pass_a = static_state.create_clear_stability_pass(encoder);
             clear_stability_pass_a.set_bind_group(0, &self.clear_stability_bind_group_a, &[]);
-            clear_stability_pass_a.dispatch(thread_groups_x, thread_groups_y, 1);
+            clear_stability_pass_a.dispatch_workgroups(thread_groups_x, thread_groups_y, 1);
         }
 
         {
             let mut clear_stability_pass_b = static_state.create_clear_stability_pass(encoder);
             clear_stability_pass_b.set_bind_group(0, &self.clear_stability_bind_group_b, &[]);
-            clear_stability_pass_b.dispatch(thread_groups_x, thread_groups_y, 1);
+            clear_stability_pass_b.dispatch_workgroups(thread_groups_x, thread_groups_y, 1);
         }
     }
 
@@ -254,19 +254,19 @@ impl StafraBoardBindings
         {
             let mut clear_restriction_pass = static_state.create_clear_restriction_pass(encoder);
             clear_restriction_pass.set_bind_group(0, &self.clear_restriction_bind_group, &[]);
-            clear_restriction_pass.dispatch(thread_groups_x, thread_groups_y, 1);
+            clear_restriction_pass.dispatch_workgroups(thread_groups_x, thread_groups_y, 1);
         }
     }
 
     pub fn reset_board_standard_corners(&mut self, encoder: &mut wgpu::CommandEncoder, static_state: &StafraStaticState)
     {
-        let thread_groups_x = std::cmp::max((self.board_width  + 1) / (2 * 16), 1u32);
+        let thread_groups_x = std::cmp::max((self.board_width + 1) / (2 * 16), 1u32);
         let thread_groups_y = std::cmp::max((self.board_height + 1) / (2 * 16), 1u32);
 
         {
             let mut reset_pass = static_state.create_clear_4_corners_pass(encoder);
             reset_pass.set_bind_group(0, &self.clear_default_bind_group, &[]);
-            reset_pass.dispatch(thread_groups_x, thread_groups_y, 1);
+            reset_pass.dispatch_workgroups(thread_groups_x, thread_groups_y, 1);
         }
     }
 
@@ -278,7 +278,7 @@ impl StafraBoardBindings
         {
             let mut reset_pass = static_state.create_clear_4_sides_pass(encoder);
             reset_pass.set_bind_group(0, &self.clear_default_bind_group, &[]);
-            reset_pass.dispatch(thread_groups_x, thread_groups_y, 1);
+            reset_pass.dispatch_workgroups(thread_groups_x, thread_groups_y, 1);
         }
     }
 
@@ -290,7 +290,7 @@ impl StafraBoardBindings
         {
             let mut reset_pass = static_state.create_clear_center_pass(encoder);
             reset_pass.set_bind_group(0, &self.clear_default_bind_group, &[]);
-            reset_pass.dispatch(thread_groups_x, thread_groups_y, 1);
+            reset_pass.dispatch_workgroups(thread_groups_x, thread_groups_y, 1);
         }
     }
 
@@ -302,7 +302,7 @@ impl StafraBoardBindings
         {
             let mut initial_transform_pass = static_state.create_initial_transform_pass(encoder);
             initial_transform_pass.set_bind_group(0, &self.initial_transform_bind_group, &[]);
-            initial_transform_pass.dispatch(thread_groups_x, thread_groups_y, 1);
+            initial_transform_pass.dispatch_workgroups(thread_groups_x, thread_groups_y, 1);
         }
     }
 
@@ -332,7 +332,7 @@ impl StafraBoardBindings
 
             let bind_group = if frame_number % 2 == 0 {&self.next_step_bind_group_a} else {&self.next_step_bind_group_b};
             next_step_pass.set_bind_group(0, bind_group, &[]);
-            next_step_pass.dispatch(thread_groups_x, thread_groups_y, 1);
+            next_step_pass.dispatch_workgroups(thread_groups_x, thread_groups_y, 1);
         }
     }
 
@@ -346,7 +346,7 @@ impl StafraBoardBindings
 
             let bind_group = if frame_number % 2 == 0 {&self.final_transform_bind_group_a} else {&self.final_transform_bind_group_b};
             final_transform_pass.set_bind_group(0, bind_group, &[]);
-            final_transform_pass.dispatch(thread_groups_x, thread_groups_y, 1);
+            final_transform_pass.dispatch_workgroups(thread_groups_x, thread_groups_y, 1);
         }
 
         let mut thread_groups_mip_x = std::cmp::max(thread_groups_x / 2, 1u32);
@@ -355,7 +355,7 @@ impl StafraBoardBindings
         {
             let mut generate_mip_pass = static_state.create_generate_mip_pass(encoder);
             generate_mip_pass.set_bind_group(0, &gen_mip_bind_group, &[]);
-            generate_mip_pass.dispatch(thread_groups_mip_x, thread_groups_mip_y, 1);
+            generate_mip_pass.dispatch_workgroups(thread_groups_mip_x, thread_groups_mip_y, 1);
 
             thread_groups_mip_x = std::cmp::max(thread_groups_mip_x / 2, 1u32);
             thread_groups_mip_y = std::cmp::max(thread_groups_mip_y / 2, 1u32);
@@ -384,7 +384,7 @@ impl StafraBoardBindings
         {
             let mut initial_restriction_transform_pass = static_state.create_initial_restriction_transform_pass(encoder);
             initial_restriction_transform_pass.set_bind_group(0, &initial_restriction_transform_bind_group, &[]);
-            initial_restriction_transform_pass.dispatch(thread_groups_x, thread_groups_y, 1);
+            initial_restriction_transform_pass.dispatch_workgroups(thread_groups_x, thread_groups_y, 1);
         }
     }
 
@@ -496,7 +496,7 @@ impl StafraBoardBindings
         }
     }
 
-    pub fn get_image_buffer_mapped_data(&self, image_buffer: &wgpu::Buffer, raw_width: u32, raw_height: u32, row_pitch: usize) -> ImageData
+    pub fn get_image_buffer_mapped_data(image_buffer: &wgpu::Buffer, raw_width: u32, raw_height: u32, row_pitch: usize) -> ImageData
     {
         let image_width  = raw_width  * 2 - 1;
         let image_height = raw_height * 2 - 1;
@@ -561,7 +561,7 @@ impl StafraBoardBindings
         }
     }
 
-    pub fn get_video_frame_buffer_mapped_data(&self, video_frame_buffer: &wgpu::Buffer, raw_width: u32, raw_height: u32) -> ImageData
+    pub fn get_video_frame_buffer_mapped_data(video_frame_buffer: &wgpu::Buffer, raw_width: u32, raw_height: u32) -> ImageData
     {
         //Because video_frame_width is a multiple of 256, row pitch is equal to width * 4.
         //We can copy the image contents directly to the buffer, which is A LOT faster

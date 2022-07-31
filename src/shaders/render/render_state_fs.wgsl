@@ -7,7 +7,7 @@ struct FsInput
     @location(0)       texcoord:      vec2<f32>
 };
 
-@stage(fragment)
+@fragment
 fn main(fin: FsInput) -> @location(0) vec4<f32>
 {
     //We store the stability texture in 2x2 quads with one RGBA channel for each element of the quad.

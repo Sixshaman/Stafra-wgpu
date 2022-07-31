@@ -21,14 +21,14 @@
 //- If only xi is divisible by 2, we construct a new quad from the top half of prev_board[xi / 2, (yi - 1) / 2] and bottom half of prev_board[xi / 2, (yi + 1) / 2], and add it to next_board.
 //- If both xi and yi are indivisible by 2, we construct a new quad from the opposite values of four surrounding quads.
 
-let click_rule_width  = 32u;
-let click_rule_height = 32u;
+const click_rule_width  = 32u;
+const click_rule_height = 32u;
 
-let click_rule_data_width  = 16u; //click_rule_width  / 2
-let click_rule_data_height = 16u; //click_rule_height / 2
+const click_rule_data_width  = 16u; //click_rule_width  / 2
+const click_rule_data_height = 16u; //click_rule_height / 2
 
-let workgroup_threads_x = 8u;
-let workgroup_threads_y = 8u;
+const workgroup_threads_x = 8u;
+const workgroup_threads_y = 8u;
 
 struct ClickRuleData
 {
@@ -166,7 +166,7 @@ fn update_quad_state(local_id: vec2<u32>, global_id: vec2<u32>, block_offset: ve
     shared_quad_states[extra_quad_state_index] = extra_quad_state & calculate_quad_mask(global_id, block_offset, board_size);
 }
 
-@stage(compute) @workgroup_size(8, 8)
+@compute @workgroup_size(8, 8)
 fn main(@builtin(local_invocation_id) local_thread_id: vec3<u32>, @builtin(global_invocation_id) global_thread_id: vec3<u32>)
 {
     let element_count: u32 = click_rule_data.header_packed.x;

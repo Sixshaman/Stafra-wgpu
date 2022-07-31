@@ -1,6 +1,5 @@
 #![cfg(target_arch = "wasm32")]
 
-pub mod dummy_waker;
 pub mod app_state;
 pub mod stafra_state;
 pub mod stafra_static_state;

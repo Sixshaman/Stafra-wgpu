@@ -257,7 +257,7 @@ impl StafraStaticBindings
         {
             let mut bake_click_rule_pass = static_state.create_bake_click_rule_pass(encoder);
             bake_click_rule_pass.set_bind_group(0, &self.bake_click_rule_bind_group, &[]);
-            bake_click_rule_pass.dispatch(thread_group_size, thread_group_size, 1);
+            bake_click_rule_pass.dispatch_workgroups(thread_group_size, thread_group_size, 1);
         }
     }
 }

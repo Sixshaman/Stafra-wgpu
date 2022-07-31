@@ -2,16 +2,13 @@
 authors = ["Sixshaman <shaman1234@gmail.com>"]
 edition = "2021"
 name = "stafra_wgpu"
-version = "0.1.2"
+version = "0.1.3"
 resolver = "2"
 
-[dependencies.wasm-bindgen]
-git = "https://github.com/Sixshaman/wasm-bindgen.git"
-
 [dependencies.web-sys]
-git = "https://github.com/Sixshaman/wasm-bindgen.git"
+version = "=0.3.58"
 features = ["Document", "Window", "DomException", "Location", "History",
-            "Event", "BlobEvent",
+            "Event", "BlobEvent", "MouseEvent",
             "Url", "UrlSearchParams", "FileReader", "FileList", "File",
             "HtmlCanvasElement", "CanvasRenderingContext2d", "ImageData",
             "HtmlImageElement", "HtmlVideoElement",
@@ -25,22 +22,18 @@ features = ["Document", "Window", "DomException", "Location", "History",
             "MediaStream", "MediaStreamTrackGenerator", "MediaStreamTrackGeneratorInit",
             "WritableStream", "WritableStreamDefaultWriter"]
 
-[dependencies.js-sys]
-git = "https://github.com/Sixshaman/wasm-bindgen.git"
-
-[dependencies.wasm-bindgen-futures]
-git = "https://github.com/Sixshaman/wasm-bindgen.git"
-
 [dependencies]
-wgpu = {git = "https://github.com/Sixshaman/wgpu.git", branch = "compat"}
-winit = {git = "https://github.com/Sixshaman/winit.git", branch = "compat"}
-console_log = {git = "https://github.com/Sixshaman/console_log.git", branch = "compat"}
-console_error_panic_hook = {git = "https://github.com/Sixshaman/console_error_panic_hook.git", branch = "compat"}
+js-sys = "0.3.58"
+wasm-bindgen-futures = "0.4.31"
+wasm-bindgen = "=0.2.81"
+console_log = "0.2.0"
+console_error_panic_hook = "0.1.7"
+wgpu = "0.13.1"
+winit = "0.26.1"
 image = "0.23.14"
 cgmath = "0.17"
 env_logger = "0.8.3"
 log = "0.4"
-futures = "0.3.14"
 
 [[bin]]
 name = "stafra_native"

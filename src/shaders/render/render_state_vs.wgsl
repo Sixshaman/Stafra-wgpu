@@ -1,11 +1,11 @@
-let fullscreen_triangle_positions = array<vec4<f32>, 3>
+const fullscreen_triangle_positions = array<vec4<f32>, 3>
 (
     vec4<f32>(-3.0, -1.0,  0.0,  1.0),
     vec4<f32>( 1.0, -1.0,  0.0,  1.0),
     vec4<f32>( 1.0,  3.0,  0.0,  1.0)
 );
 
-let fullscreen_triangle_texcoords = array<vec2<f32>, 3>
+const fullscreen_triangle_texcoords = array<vec2<f32>, 3>
 (
     vec2<f32>(-1.0,  1.0),
     vec2<f32>( 1.0,  1.0),
@@ -18,7 +18,7 @@ struct VsOutput
     @location(0)       texcoord:      vec2<f32>
 };
 
-@stage(vertex)
+@vertex
 fn main(@builtin(vertex_index) vertex_id: u32) -> VsOutput
 {
     var vout: VsOutput;

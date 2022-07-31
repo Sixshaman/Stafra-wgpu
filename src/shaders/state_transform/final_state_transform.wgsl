@@ -7,13 +7,13 @@ struct SpawnData
     spawn_data_flags: u32
 };
 
-let FlagSmoothTransform: u32 = 0x01u;
+const FlagSmoothTransform: u32 = 0x01u;
 
 @group(0) @binding(0) var          final_board:   texture_2d<u32>;
 @group(0) @binding(1) var          out_tex_mip_0: texture_storage_2d<rgba8unorm, write>;
 @group(0) @binding(2) var<uniform> spawn_data:    SpawnData;
 
-@stage(compute) @workgroup_size(16, 16)
+@compute @workgroup_size(16, 16)
 fn main(@builtin(global_invocation_id) global_thread_id: vec3<u32>)
 {
 	let final_stability_encoded: u32 = textureLoad(final_board, vec2<i32>(global_thread_id.xy), 0).x;

@@ -3,7 +3,7 @@
 @group(0) @binding(0) var initial_state_tex: texture_2d<f32>;
 @group(0) @binding(1) var out_initial_board: texture_storage_2d<r32uint, write>;
 
-@stage(compute) @workgroup_size(16, 16)
+@compute @workgroup_size(16, 16)
 fn main(@builtin(global_invocation_id) global_thread_id: vec3<u32>)
 {
     let initial_state_size: vec2<i32> = textureDimensions(initial_state_tex);
