@@ -10,7 +10,7 @@ struct FrameCounter
     sent_frame_count:     u32,
     encoded_frame_count:  u32,
     recorded_frame_count: u32,
-    max_frame_count:      u32
+    final_frame:          u32
 }
 
 impl FrameCounter
@@ -22,7 +22,7 @@ impl FrameCounter
             sent_frame_count:     0,
             encoded_frame_count:  0,
             recorded_frame_count: 0,
-            max_frame_count:      u32::MAX
+            final_frame:          u32::MAX
         }
     }
 
@@ -31,7 +31,7 @@ impl FrameCounter
         self.sent_frame_count     = 0;
         self.encoded_frame_count  = 0;
         self.recorded_frame_count = 0;
-        self.max_frame_count      = u32::MAX;
+        self.final_frame          = u32::MAX;
     }
 }
 
@@ -45,7 +45,7 @@ pub struct VideoFrameData
 struct WebCodecsRecordState
 {
     media_recorder: Rc<RefCell<web_sys::MediaRecorder>>,
-    video_encoder:  web_sys::VideoEncoder,
+    video_encoder: web_sys::VideoEncoder,
 
     #[allow(dead_code)]
     media_stream: web_sys::MediaStream
@@ -68,7 +68,7 @@ impl WebCodecsRecordState
 
         //Create the stream
         let media_stream_track_generator_init = web_sys::MediaStreamTrackGeneratorInit::new("video");
-        let media_stream_track_generator_opt = web_sys::MediaStreamTrackGenerator::new(&media_stream_track_generator_init);
+        let media_stream_track_generator_opt  = web_sys::MediaStreamTrackGenerator::new(&media_stream_track_generator_init);
 
         if let Err(_) = media_stream_track_generator_opt
         {
@@ -113,13 +113,12 @@ impl WebCodecsRecordState
         let media_recorder_clone_for_write = media_recorder.clone();
         let after_write_callback = Closure::wrap(Box::new(move |_js_value: JsValue|
         {
-            //Pause the recorder after each frame, to record at constant FPS
             let mut frame_counter = frame_counter_clone_for_write.borrow_mut();
-            let media_recorder = media_recorder_clone_for_write.borrow_mut();
-
             frame_counter.recorded_frame_count += 1;
 
-            if frame_counter.recorded_frame_count >= frame_counter.max_frame_count
+            //Pause the recorder after each frame, to record at constant FPS
+            let media_recorder = media_recorder_clone_for_write.borrow_mut();
+            if frame_counter.recorded_frame_count >= frame_counter.final_frame
             {
                 media_recorder.stop().expect("Exception: MediaRecorder stop error");
             }
@@ -127,7 +126,6 @@ impl WebCodecsRecordState
             {
                 media_recorder.pause().expect("Exception: MediaRecorder pause error");
             }
-
         }) as Box<dyn FnMut(JsValue)>);
 
         let timeout_write_callback = Closure::wrap(Box::new(move |_js_value: JsValue|
@@ -175,7 +173,7 @@ impl WebCodecsRecordState
             video_decoder.decode(&video_chunk);
 
             frame_counter.encoded_frame_count += 1;
-            if frame_counter.encoded_frame_count >= frame_counter.max_frame_count
+            if frame_counter.encoded_frame_count >= frame_counter.final_frame
             {
                 #[allow(unused_must_use)]
                 {
@@ -283,15 +281,39 @@ impl VideoRecordState
 
         let frame_duration  = 1000000.0 / 60.0;
         let frame_timestamp = frame_counter.sent_frame_count as f64 * frame_duration;
-
-        let key_frame = frame_counter.sent_frame_count % 120 == 0 || frame_counter.sent_frame_count == frame_counter.max_frame_count - 1;
-        web_codecs_record_state.append_video_frame(frame_data.width, frame_data.height, frame_data.pixel_data, frame_duration, frame_timestamp, key_frame);
+        let key_frame       = frame_counter.sent_frame_count % 60 == 0;
 
         frame_counter.sent_frame_count += 1;
-        if frame_counter.sent_frame_count >= frame_counter.max_frame_count
+        web_codecs_record_state.append_video_frame(frame_data.width, frame_data.height, frame_data.pixel_data, frame_duration, frame_timestamp, key_frame);
+
+        Ok(())
+    }
+
+    pub fn poll_frame_and_close(&mut self) -> Result<(), String>
+    {
+        if let None = self.web_codecs_record_state
         {
-            web_codecs_record_state.flush();
+            return Err("Web codecs recording is not supported".to_string());
         }
+
+        let recieve_result = self.video_frame_consumer.try_recv();
+        if let Some(error) = recieve_result.as_ref().err()
+        {
+            return Err("Frame recieve error: ".to_string() + &error.to_string());
+        }
+
+        let     web_codecs_record_state = self.web_codecs_record_state.as_mut().unwrap();
+        let     frame_data              = recieve_result.unwrap();
+        let mut frame_counter           = self.frame_counter.borrow_mut();
+
+        let frame_duration  = 1000000.0 / 60.0;
+        let frame_timestamp = frame_counter.sent_frame_count as f64 * frame_duration;
+
+        frame_counter.sent_frame_count += 1;
+        frame_counter.final_frame = frame_counter.sent_frame_count;
+
+        web_codecs_record_state.append_video_frame(frame_data.width, frame_data.height, frame_data.pixel_data, frame_duration, frame_timestamp, true);
+        web_codecs_record_state.flush();
 
         Ok(())
     }
@@ -324,11 +346,5 @@ impl VideoRecordState
         {
             Err("Web codecs recording is not supported".to_string())
         }
-    }
-
-    pub fn set_frame_limit(&mut self, final_frame: u32)
-    {
-        let mut frame_counter = self.frame_counter.borrow_mut();
-        frame_counter.max_frame_count = final_frame;
     }
 }

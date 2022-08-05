@@ -85,9 +85,9 @@ pub async fn run_event_loop()
     let refresh_function_copy = refresh_function.clone();
     *refresh_function_copy.borrow_mut() = Some(Closure::wrap(Box::new(move ||
     {
-        let mut app_state      = app_state_clone_for_refresh.borrow_mut();
-        let mut stafra_state   = stafra_state_clone_for_refresh.borrow_mut();
-        let video_record_state = video_record_state_clone_for_refresh.borrow_mut();
+        let mut app_state          = app_state_clone_for_refresh.borrow_mut();
+        let mut stafra_state       = stafra_state_clone_for_refresh.borrow_mut();
+        let mut video_record_state = video_record_state_clone_for_refresh.borrow_mut();
 
         let window = web_sys::window().unwrap();
 
@@ -104,10 +104,23 @@ pub async fn run_event_loop()
             {
                 video_frame_channel.send(video_record_state::VideoFrameData{pixel_data, width, height}).unwrap();
             });
+
+            if stafra_state.frame_number() >= app_state.last_frame
+            {
+                video_record_state.poll_video_frame().unwrap_or(());
+            }
+            else
+            {
+                video_record_state.poll_frame_and_close().unwrap_or(());
+            }
         }
         else if app_state.run_state == RunState::PausedRecording && video_record_state.is_recording_supported()
         {
             update_next_frame_button_paused_recording(!stafra_state.video_frame_queue_full());
+        }
+        else if app_state.run_state == RunState::Stopped && video_record_state.is_recording_supported() && video_record_state.pending()
+        {
+            video_record_state.poll_frame_and_close().unwrap_or(());
         }
 
         if app_state.last_frame == stafra_state.frame_number() && app_state.run_state != RunState::Paused
@@ -191,8 +204,8 @@ fn create_closures(app_state_rc: Rc<RefCell<app_state::AppState>>, stafra_state_
     create_stop_closure(app_state_rc.clone(), stafra_state_rc.clone(), video_record_state_rc.clone());
     create_next_frame_closure(app_state_rc.clone(), stafra_state_rc.clone(), video_record_state_rc.clone());
 
-    create_enable_last_frame_closure(app_state_rc.clone(), video_record_state_rc.clone());
-    create_change_last_frame_closure(app_state_rc.clone(), video_record_state_rc.clone());
+    create_enable_last_frame_closure(app_state_rc.clone());
+    create_change_last_frame_closure(app_state_rc.clone());
 
     create_enable_spawn_closure(stafra_state_rc.clone());
     create_decrement_spawn_closure(stafra_state_rc.clone());
@@ -350,14 +363,12 @@ fn create_stop_closure(app_state_rc: Rc<RefCell<app_state::AppState>>, stafra_st
                 if !video_record_state.pending() && video_record_state.is_recording_supported()
                 {
                     video_record_state.restart().unwrap();
-                    video_record_state.set_frame_limit(app_state.last_frame);
                     app_state.run_state = RunState::Recording;
                 }
             }
 
             RunState::Recording | RunState::PausedRecording =>
             {
-                video_record_state.set_frame_limit(stafra_state.frame_number());
                 app_state.run_state = RunState::Stopped;
 
                 stafra_state.reset_board_unchanged();
@@ -433,7 +444,7 @@ fn create_next_frame_closure(app_state_rc: Rc<RefCell<app_state::AppState>>, sta
     next_frame_closure.forget();
 }
 
-fn create_enable_last_frame_closure(app_state_rc: Rc<RefCell<app_state::AppState>>, video_record_state_rc: Rc<RefCell<video_record_state::VideoRecordState>>)
+fn create_enable_last_frame_closure(app_state_rc: Rc<RefCell<app_state::AppState>>)
 {
     let window = web_sys::window().unwrap();
     let document = window.document().unwrap();
@@ -441,8 +452,7 @@ fn create_enable_last_frame_closure(app_state_rc: Rc<RefCell<app_state::AppState
 
     let enable_last_frame_closure = Closure::wrap(Box::new(move |event: web_sys::Event|
     {
-        let mut app_state          = app_state_rc.borrow_mut();
-        let mut video_record_state = video_record_state_rc.borrow_mut();
+        let mut app_state = app_state_rc.borrow_mut();
 
         let query_string = web_sys::UrlSearchParams::new_with_str(window.location().search().unwrap().as_str()).unwrap();
 
@@ -475,8 +485,6 @@ fn create_enable_last_frame_closure(app_state_rc: Rc<RefCell<app_state::AppState
 
         let new_search_state = window.location().pathname().unwrap() + "?" + &query_string.to_string().as_string().unwrap();
         window.history().unwrap().replace_state_with_url(&JsValue::NULL, "", Some(&new_search_state)).unwrap();
-
-        video_record_state.set_frame_limit(app_state.last_frame);
 
     }) as Box<dyn Fn(web_sys::Event)>);
 
@@ -672,7 +680,7 @@ fn create_change_smooth_transform_closure(stafra_state_rc: Rc<RefCell<stafra_sta
     smooth_transform_closure.forget();
 }
 
-fn create_change_last_frame_closure(app_state_rc: Rc<RefCell<app_state::AppState>>, video_record_state_rc: Rc<RefCell<video_record_state::VideoRecordState>>)
+fn create_change_last_frame_closure(app_state_rc: Rc<RefCell<app_state::AppState>>)
 {
     let window = web_sys::window().unwrap();
     let document = window.document().unwrap();
@@ -680,8 +688,7 @@ fn create_change_last_frame_closure(app_state_rc: Rc<RefCell<app_state::AppState
 
     let change_last_frame_closure = Closure::wrap(Box::new(move |event: web_sys::Event|
     {
-        let mut app_state          = app_state_rc.borrow_mut();
-        let mut video_record_state = video_record_state_rc.borrow_mut();
+        let mut app_state = app_state_rc.borrow_mut();
 
         let query_string = web_sys::UrlSearchParams::new_with_str(window.location().search().unwrap().as_str()).unwrap();
 
@@ -700,8 +707,6 @@ fn create_change_last_frame_closure(app_state_rc: Rc<RefCell<app_state::AppState
 
         let new_search_state = window.location().pathname().unwrap() + "?" + &query_string.to_string().as_string().unwrap();
         window.history().unwrap().replace_state_with_url(&JsValue::NULL, "", Some(&new_search_state)).unwrap();
-
-        video_record_state.set_frame_limit(app_state.last_frame);
 
     }) as Box<dyn Fn(web_sys::Event)>);
 
