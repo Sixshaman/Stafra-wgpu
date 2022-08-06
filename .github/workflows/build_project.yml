@@ -10,6 +10,24 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  check:
+    name: Rust project
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      
+      - name: Install wasm-bindgen
+        uses: actions-rs/target@v1
+        with:
+            toolchain: stable
+            target: wasm32-unknown-unknown
+            override: true
+            
+      - name: Run cargo check
+        uses: actions-rs/cargo@v1
+        with:
+          command: check
+
   build:
     runs-on: ubuntu-latest
 
