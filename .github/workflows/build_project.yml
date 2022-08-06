@@ -18,6 +18,7 @@ jobs:
     - uses: actions/checkout@v3
     - name: Build
       run:
+        echo "$PWD"
         cp src/stafra.html static/stafra.html |
         cp src/stafra.css  static/stafra.css  |
         RUSTFLAGS=--cfg=web_sys_unstable_apis cargo build --verbose --lib --release --target wasm32-unknown-unknown
