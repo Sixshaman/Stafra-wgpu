@@ -24,9 +24,22 @@ jobs:
           toolchain: stable
           target: wasm32-unknown-unknown
           override: true
+    - name: Create deploy folder
+      run: mkdir -p static
+    - name: Copy HTML
+      uses: canastro/copy-file-action@master
+      with:
+        source: "src/stafra.html"
+        target: "static/stafra.html"
+    - name: Copy CSS
+      uses: canastro/copy-file-action@master
+      with:
+        source: "src/stafra.css"
+        target: "static/stafra.css"
     - name: Build
       run:
-        RUSTFLAGS=--cfg=web_sys_unstable_apis cargo build --verbose --lib --release --target wasm32-unknown-unknown
+        RUSTFLAGS=--cfg=web_sys_unstable_apis cargo build --verbose --lib --release --target wasm32-unknown-unknown |
+        wasm-bindgen --target web --out-name stafra --out-dir static target/wasm32-unknown-unknown/release/stafra.wasm
     - name: Run tests
       run: 
-        RUSTFLAGS=--cfg=web_sys_unstable_apis CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUNNER=wasm-bindgen-test-runner cargo test --verbose --lib --target wasm32-unknown-unknown
+        RUSTFLAGS=--cfg=web_sys_unstable_apis CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUNNER=wasm-bindgen-test-runner cargo test --verbose --target wasm32-unknown-unknown
