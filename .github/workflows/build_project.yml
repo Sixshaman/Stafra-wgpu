@@ -44,8 +44,7 @@ jobs:
         target: "static/stafra.css"
     - name: Build
       run:
-        RUSTFLAGS=--cfg=web_sys_unstable_apis cargo build --verbose --lib --release --target wasm32-unknown-unknown |
-        wasm-bindgen --target web --out-name stafra --out-dir static ./target/wasm32-unknown-unknown/release/stafra.wasm
+        RUSTFLAGS=--cfg=web_sys_unstable_apis cargo build --verbose --lib --release --target wasm32-unknown-unknown
     - name: Run tests
       run: 
         RUSTFLAGS=--cfg=web_sys_unstable_apis CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUNNER=wasm-bindgen-test-runner cargo test --verbose --target wasm32-unknown-unknown
