@@ -2,15 +2,21 @@ name: Rust
 
 on:
   push:
-    branches: [ "main" ]
+    branches: 
+      main
+    tags:
+      Version-*
   pull_request:
-    branches: [ "main" ]
+    branches:
+      main
+    tags:
+      Version-*
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build:
+  build-and-release:
     runs-on: ubuntu-latest
 
     steps:
@@ -43,3 +49,16 @@ jobs:
     - name: Run tests
       run: 
         RUSTFLAGS=--cfg=web_sys_unstable_apis CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUNNER=wasm-bindgen-test-runner cargo test --verbose --target wasm32-unknown-unknown
+    - name: Print tags
+      run: echo  The tags are ${{ inputs.tags }} 
+    - name: Create Draft Release
+      id: create_release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: <tofill>
+        release_name: <tofill>
+        draft: true
+        prerelease: false
+  
