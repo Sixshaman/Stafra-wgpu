@@ -26,3 +26,13 @@ jobs:
           override: true
     - name: Create deploy folder
       run: mkdir -p static
+    - name: Copy HTML
+      uses: canastro/copy-file-action@master
+      with:
+        source: "src/stafra.html"
+        target: "static/stafra.html"
+    - name: Copy CSS
+      uses: canastro/copy-file-action@master
+      with:
+        source: "src/stafra.css"
+        target: "static/stafra.css"
