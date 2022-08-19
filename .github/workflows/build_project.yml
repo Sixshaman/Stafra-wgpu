@@ -37,9 +37,32 @@ jobs:
         source: "src/stafra.css"
         target: "static/stafra.css"
     - name: Build
+      id: build_stafra
       run:
-        RUSTFLAGS=--cfg=web_sys_unstable_apis CARGO_TARGET_DIR="target" cargo build --verbose --lib --release --target wasm32-unknown-unknown |
-        ls |
+        RUSTFLAGS=--cfg=web_sys_unstable_apis CARGO_TARGET_DIR="target" cargo build --verbose --lib --release --target wasm32-unknown-unknown
+    - name: Set up Python 3.7
+      uses: actions/setup-python@v1
+      with:
+        python-version: "3.7"
+
+    - uses: actions/checkout@v1
+
+    - name: Fetch action
+      id: pl
+      uses: Rishabh510/Path-lister-action@master
+      with:
+        path: ".github/"
+        type: ".yml"
+
+    - name: Output results
+      run: |
+        echo "Found ${{ steps.build_stafra.outputs.path_count }} file(s) with this extension:"
+        for i in ${{ steps.build_stafra.outputs.paths }}; do
+        echo $i
+        done
+        
+    - name: Pack the wasm files
+      run:
         wasm-bindgen --target web --out-name stafra --out-dir static target/wasm32-unknown-unknown/release/stafra.wasm
     - name: Run tests
       run: 
