@@ -39,7 +39,7 @@ jobs:
     - name: Build
       id: build_stafra
       run:
-        RUSTFLAGS=--cfg=web_sys_unstable_apis CARGO_TARGET_DIR="target" cargo build --verbose --lib --release --target wasm32-unknown-unknown
+        RUSTFLAGS=--cfg=web_sys_unstable_apis CARGO_TARGET_DIR="target" cargo build --verbose --lib --release --target wasm32-unknown-unknown --message-format=json
     - name: Set up Python 3.7
       uses: actions/setup-python@v1
       with:
