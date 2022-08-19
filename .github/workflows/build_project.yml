@@ -47,7 +47,7 @@ jobs:
       run: 
         RUSTFLAGS=--cfg=web_sys_unstable_apis CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUNNER=wasm-bindgen-test-runner cargo test --verbose --target wasm32-unknown-unknown
     - name: Print tags
-      run: echo  The tags are ${{ inputs.tags }} 
+      run: echo  The tags are ${{ inputs.tags }}
     - name: Create Draft Release
       id: create_release
       uses: actions/create-release@v1
@@ -58,4 +58,4 @@ jobs:
         release_name: <tofill>
         draft: true
         prerelease: false
-  
+
