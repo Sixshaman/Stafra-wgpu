@@ -41,14 +41,24 @@ jobs:
       id: build_stafra
       run:
         RUSTFLAGS=--cfg=web_sys_unstable_apis cargo build --verbose --lib --release --target wasm32-unknown-unknown
-    - name: List contents part 2
-      run: |
-           for file in ${GITHUB_WORKSPACE}/*; do
-           echo "${file##*/}"
-           done
     - name: Pack the wasm files
       run:
         wasm-bindgen --target web --out-name stafra --out-dir static ${GITHUB_WORKSPACE}/target/wasm32-unknown-unknown/release/stafra.wasm
+    - name: List contents part 3
+      run: |
+           for file in ${GITHUB_WORKSPACE}/static/*; do
+           echo "${file##*/}"
+           done
     - name: Run tests
       run: 
         RUSTFLAGS=--cfg=web_sys_unstable_apis CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUNNER=wasm-bindgen-test-runner cargo test --verbose --target wasm32-unknown-unknown
+    - name: Create Draft Release
+      id: create_release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
+      with:
+        tag_name: <tofill>
+        release_name: <tofill>
+        draft: true
+        prerelease: false
