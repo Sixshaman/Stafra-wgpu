@@ -15,20 +15,10 @@ jobs:
 
     steps:
     - uses: actions/checkout@v2
-    - name: List contents part 1
-      run: |
-           for file in ${GITHUB_WORKSPACE}/*; do
-           echo "${file##*/}"
-           done
-    - uses: jetli/wasm-bindgen-action@v0.1.0
-    - name: Install wasm-pack
-      run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
-    - name: Install wasm-bindgen
-      uses: actions-rs/toolchain@v1
+    - name: Install Wasm-Bindgen
+      uses: jetli/wasm-bindgen-action@v0.1.0
       with:
-          toolchain: stable
-          target: wasm32-unknown-unknown
-          override: true
+        version: 0.2.81
     - name: Create deploy folder
       run: mkdir -p ${GITHUB_WORKSPACE}/static
     - name: Copy HTML
