@@ -17,7 +17,7 @@ jobs:
     - uses: actions/checkout@v2
     - name: List contents part 1
       run: |
-           for file in /home/runner/work/*; do
+           for file in ${GITHUB_WORKSPACE}/*; do
            echo "${file##*/}"
            done
     - uses: jetli/wasm-bindgen-action@v0.1.0
@@ -30,7 +30,7 @@ jobs:
           target: wasm32-unknown-unknown
           override: true
     - name: Create deploy folder
-      run: mkdir -p static
+      run: mkdir -p ${GITHUB_WORKSPACE}/static
     - name: Copy HTML
       uses: canastro/copy-file-action@master
       with:
@@ -47,12 +47,12 @@ jobs:
         RUSTFLAGS=--cfg=web_sys_unstable_apis cargo build --verbose --lib --release --target wasm32-unknown-unknown
     - name: List contents part 2
       run: |
-           for file in /home/runner/work/*; do
+           for file in ${GITHUB_WORKSPACE}/*; do
            echo "${file##*/}"
            done
     - name: Pack the wasm files
       run:
-        wasm-bindgen --target web --out-name stafra --out-dir static ${GITHUB_WORKSPACE}/../../target/wasm32-unknown-unknown/release/stafra.wasm
+        wasm-bindgen --target web --out-name stafra --out-dir static ${GITHUB_WORKSPACE}/target/wasm32-unknown-unknown/release/stafra.wasm
     - name: Run tests
       run: 
         RUSTFLAGS=--cfg=web_sys_unstable_apis CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUNNER=wasm-bindgen-test-runner cargo test --verbose --target wasm32-unknown-unknown
