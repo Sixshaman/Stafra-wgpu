@@ -21,8 +21,15 @@ jobs:
 
     steps:
     - uses: actions/checkout@v2
+    - name: Extract tag name
+      id: tag_name
+      uses: actions/github-script@0.2.0
+      with:
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        script: |
+          return context.payload.ref.replace(/\/refs\/tags\//, '');
     - name: Print tags
-      run: echo ${GITHUB_REF##*/}
+      run: echo ${{ steps.tag_name.outputs.result }}
     - name: Install wasm-bindgen-cli
       uses: jetli/wasm-bindgen-action@v0.1.0
       with:
