@@ -23,6 +23,9 @@ jobs:
     - uses: actions/checkout@v2
     - uses: actions-ecosystem/action-get-latest-tag@v1
       id: get-latest-tag
+      with:
+        with_initial_version: true
+        initial_version: Version-1.0
     - name: Print tags
       run: echo ${{steps.get-latest-tag.outputs.tag}}
     - name: Install wasm-bindgen-cli
