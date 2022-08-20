@@ -26,6 +26,8 @@ jobs:
           override: true
     - name: Create deploy folder
       run: mkdir -p static
+    - name: Print environment
+      run: echo ${GITHUB_WORKSPACE}
     - name: Copy HTML
       uses: canastro/copy-file-action@master
       with:
