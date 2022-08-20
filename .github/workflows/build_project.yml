@@ -15,12 +15,11 @@ jobs:
 
     steps:
     - uses: actions/checkout@v2
-    
-    - name: Set up Python 3.7
-      uses: actions/setup-python@v1
-      with:
-        python-version: "3.7"
-    
+    - name: List contents part 1
+      run: |
+           for file in /home/runner/work/*; do
+           echo "${file##*/}"
+           done
     - uses: jetli/wasm-bindgen-action@v0.1.0
     - name: Install wasm-pack
       run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
@@ -46,20 +45,11 @@ jobs:
       id: build_stafra
       run:
         RUSTFLAGS=--cfg=web_sys_unstable_apis cargo build --verbose --lib --release --target wasm32-unknown-unknown
-        
-    - name: Fetch action
-      id: pl
-      uses: Rishabh510/Path-lister-action@master
-      with:
-        path: /home/runner/work/
-
-    - name: Output results
+    - name: List contents part 2
       run: |
-        echo "Found ${{ steps.pl.outputs.path_count }} file(s) with this extension:"
-        for i in ${{ steps.pl.outputs.paths }}; do
-        echo $i
-        done
-        
+           for file in /home/runner/work/*; do
+           echo "${file##*/}"
+           done
     - name: Pack the wasm files
       run:
         wasm-bindgen --target web --out-name stafra --out-dir static ${GITHUB_WORKSPACE}/../../target/wasm32-unknown-unknown/release/stafra.wasm
