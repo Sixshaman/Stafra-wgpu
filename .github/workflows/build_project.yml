@@ -1,0 +1,65 @@
+name: Rust
+
+on:
+  push:
+    branches: 
+      main
+    tags:
+      Version-*
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+    - name: Install wasm-bindgen-cli
+      uses: jetli/wasm-bindgen-action@v0.1.0
+      with:
+        version: 0.2.81
+    - name: Install wasm-bindgen
+      uses: actions-rs/toolchain@v1
+      with:
+          toolchain: stable
+          target: wasm32-unknown-unknown
+          override: true
+    - name: Create deploy folder
+      run: mkdir -p ${GITHUB_WORKSPACE}/stafra_wgpu
+    - name: Copy HTML
+      uses: canastro/copy-file-action@master
+      with:
+        source: "src/stafra.html"
+        target: "stafra_wgpu/stafra.html"
+    - name: Copy CSS
+      uses: canastro/copy-file-action@master
+      with:
+        source: "src/stafra.css"
+        target: "stafra_wgpu/stafra.css"
+    - name: Build
+      id: build_stafra
+      run:
+        RUSTFLAGS=--cfg=web_sys_unstable_apis cargo build --verbose --lib --release --target wasm32-unknown-unknown
+    - name: Pack the wasm files
+      run:
+        wasm-bindgen --target web --out-name stafra --out-dir stafra_wgpu ${GITHUB_WORKSPACE}/target/wasm32-unknown-unknown/release/stafra.wasm
+    - name: Run tests
+      run: 
+        RUSTFLAGS=--cfg=web_sys_unstable_apis CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUNNER=wasm-bindgen-test-runner cargo test --verbose --target wasm32-unknown-unknown
+    - uses: actions-ecosystem/action-get-latest-tag@v1
+      id: get-latest-tag
+      with:
+        with_initial_version: true
+        initial_version: Version-1.0
+    - name: Zip release
+      uses: montudor/action-zip@v1
+      with:
+        args: zip -qq -r stafra_wgpu.zip stafra_wgpu
+    - name: Create release
+      id: create_release
+      uses: ncipollo/release-action@v1
+      with:
+        artifacts: "stafra_wgpu.zip"
+        token: ${{secrets.GITHUB_TOKEN}}
