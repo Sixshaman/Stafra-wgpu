@@ -21,13 +21,6 @@ jobs:
 
     steps:
     - uses: actions/checkout@v2
-    - uses: actions-ecosystem/action-get-latest-tag@v1
-      id: get-latest-tag
-      with:
-        with_initial_version: true
-        initial_version: Version-1.0
-    - name: Print tags
-      run: echo ${{steps.get-latest-tag.outputs.tag}}
     - name: Install wasm-bindgen-cli
       uses: jetli/wasm-bindgen-action@v0.1.0
       with:
@@ -65,13 +58,18 @@ jobs:
     - name: Run tests
       run: 
         RUSTFLAGS=--cfg=web_sys_unstable_apis CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUNNER=wasm-bindgen-test-runner cargo test --verbose --target wasm32-unknown-unknown
+    - uses: actions-ecosystem/action-get-latest-tag@v1
+      id: get-latest-tag
+      with:
+        with_initial_version: true
+        initial_version: Version-1.0
     - name: Create Draft Release
       id: create_release
       uses: actions/create-release@v1
       env:
         GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
       with:
-        tag_name: <tofill>
-        release_name: <tofill>
+        tag_name: ${{steps.get-latest-tag.outputs.tag}}
+        release_name: ${{steps.get-latest-tag.outputs.tag}}
         draft: true
         prerelease: false
