@@ -62,8 +62,9 @@ jobs:
       uses: montudor/action-zip@v1
       with:
         args: zip -qq -r stafra_wgpu.zip stafra_wgpu
-    - name: List contents part 4
-      run: |
-           for file in ${GITHUB_WORKSPACE}/*; do
-           echo "${file##*/}"
-           done
+    - name: Create release
+      id: create_release
+      uses: ncipollo/release-action@v1
+      with:
+        artifacts: "stafra_wgpu.zip"
+        token: ${{secrets.GITHUB_TOKEN}}
