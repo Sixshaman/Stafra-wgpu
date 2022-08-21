@@ -6,11 +6,6 @@ on:
       main
     tags:
       Version-*
-  pull_request:
-    branches:
-      main
-    tags:
-      Version-*
 
 env:
   CARGO_TERM_COLOR: always
