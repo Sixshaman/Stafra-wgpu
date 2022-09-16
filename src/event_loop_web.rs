@@ -91,6 +91,7 @@ pub async fn run_event_loop()
 
         let window = web_sys::window().unwrap();
 
+        let mut new_run_state: RunState = app_state.run_state;
         if app_state.run_state == RunState::Running
         {
             stafra_state.update();
@@ -107,25 +108,37 @@ pub async fn run_event_loop()
 
             if stafra_state.frame_number() >= app_state.last_frame
             {
-                video_record_state.poll_video_frame().unwrap_or(());
+                video_record_state.poll_frame_and_close().unwrap_or(());
+                new_run_state = RunState::SavePendingRecording;
             }
             else
             {
-                video_record_state.poll_frame_and_close().unwrap_or(());
+                video_record_state.poll_video_frame().unwrap_or(());
             }
         }
         else if app_state.run_state == RunState::PausedRecording && video_record_state.is_recording_supported()
         {
             update_next_frame_button_paused_recording(!stafra_state.video_frame_queue_full());
         }
-        else if app_state.run_state == RunState::Stopped && video_record_state.is_recording_supported() && video_record_state.pending()
+        else if app_state.run_state == RunState::Stopped && video_record_state.is_recording_supported() && video_record_state.recording()
         {
             video_record_state.poll_frame_and_close().unwrap_or(());
+            new_run_state = RunState::SavePendingRecording;
+        }
+        else if app_state.run_state == RunState::SavePendingRecording && !video_record_state.pending()
+        {
+            new_run_state = RunState::Stopped;
         }
 
-        if app_state.last_frame == stafra_state.frame_number() && app_state.run_state != RunState::Paused
+        if app_state.last_frame == stafra_state.frame_number() && new_run_state != RunState::SavePendingRecording
         {
-            app_state.run_state = RunState::Paused;
+            new_run_state = RunState::Paused;
+        }
+
+        if app_state.run_state != new_run_state
+        {
+            app_state.run_state = new_run_state;
+            stafra_state.set_click_rule_read_only(app_state.run_state != RunState::Stopped);
             update_ui(app_state.run_state);
         }
 
@@ -318,7 +331,8 @@ fn create_play_pause_closure(app_state_rc: Rc<RefCell<app_state::AppState>>, sta
                 RunState::Stopped | RunState::Paused => RunState::Running,
                 RunState::Running                    => RunState::Paused,
                 RunState::Recording                  => RunState::PausedRecording,
-                RunState::PausedRecording            => RunState::Recording
+                RunState::PausedRecording            => RunState::Recording,
+                RunState::SavePendingRecording       => RunState::SavePendingRecording
             };
         }
         else
@@ -328,7 +342,8 @@ fn create_play_pause_closure(app_state_rc: Rc<RefCell<app_state::AppState>>, sta
                 RunState::Stopped | RunState::Paused => RunState::Running,
                 RunState::Running                    => RunState::Paused,
                 RunState::Recording                  => RunState::Paused,
-                RunState::PausedRecording            => RunState::Running
+                RunState::PausedRecording            => RunState::Running,
+                RunState::SavePendingRecording       => RunState::SavePendingRecording
             };
         }
 
@@ -381,6 +396,10 @@ fn create_stop_closure(app_state_rc: Rc<RefCell<app_state::AppState>>, stafra_st
 
                 stafra_state.reset_board_unchanged();
                 stafra_state.set_click_rule_read_only(false);
+            }
+
+            RunState::SavePendingRecording =>
+            {
             }
         };
 
@@ -1159,7 +1178,7 @@ fn update_ui(run_state: RunState)
     let play_pause_button = document.get_element_by_id("button_play_pause").unwrap().dyn_into::<web_sys::HtmlButtonElement>().unwrap();
     let stop_button       = document.get_element_by_id("button_stop_record").unwrap().dyn_into::<web_sys::HtmlButtonElement>().unwrap();
 
-    if run_state == RunState::Running || run_state == RunState::Recording
+    if run_state == RunState::Running || run_state == RunState::Recording || run_state == RunState::SavePendingRecording
     {
         play_pause_button.set_text_content(Some("⏸️"));
     }
@@ -1168,7 +1187,7 @@ fn update_ui(run_state: RunState)
         play_pause_button.set_text_content(Some("▶️"));
     }
 
-    if run_state == RunState::Stopped
+    if run_state == RunState::Stopped || run_state == RunState::SavePendingRecording
     {
         stop_button.set_text_content(Some("⏺️"));
     }
@@ -1177,14 +1196,26 @@ fn update_ui(run_state: RunState)
         stop_button.set_text_content(Some("⏹️"));
     }
 
+    let stop_button = document.get_element_by_id("button_stop_record").unwrap().dyn_into::<web_sys::HtmlButtonElement>().unwrap();
+    stop_button.set_disabled(run_state == RunState::SavePendingRecording);
+
+    let play_pause_button = document.get_element_by_id("button_play_pause").unwrap().dyn_into::<web_sys::HtmlButtonElement>().unwrap();
+    play_pause_button.set_disabled(run_state == RunState::SavePendingRecording);
+
     let next_frame_button = document.get_element_by_id("button_next_frame").unwrap().dyn_into::<web_sys::HtmlButtonElement>().unwrap();
-    next_frame_button.set_disabled(run_state == RunState::Running || run_state == RunState::Recording || run_state == RunState::PausedRecording);
+    next_frame_button.set_disabled(run_state == RunState::Running || run_state == RunState::Recording || run_state == RunState::PausedRecording || run_state == RunState::SavePendingRecording);
+
+    let save_png_button = document.get_element_by_id("button_save_png").unwrap().dyn_into::<web_sys::HtmlButtonElement>().unwrap();
+    save_png_button.set_disabled(run_state == RunState::SavePendingRecording);
 
     let initial_board_select = document.get_element_by_id("initial_states").unwrap().dyn_into::<web_sys::HtmlSelectElement>().unwrap();
     initial_board_select.set_disabled(run_state != RunState::Stopped);
 
     let size_select = document.get_element_by_id("sizes").unwrap().dyn_into::<web_sys::HtmlSelectElement>().unwrap();
     size_select.set_disabled(run_state != RunState::Stopped);
+
+    let last_frame_checkbox = document.get_element_by_id("last_frame_checkbox").unwrap().dyn_into::<web_sys::HtmlInputElement>().unwrap();
+    last_frame_checkbox.set_disabled(run_state == RunState::SavePendingRecording);
 
     let spawn_checkbox = document.get_element_by_id("spawn_checkbox").unwrap().dyn_into::<web_sys::HtmlInputElement>().unwrap();
     spawn_checkbox.set_disabled(run_state != RunState::Stopped);

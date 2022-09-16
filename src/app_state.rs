@@ -5,7 +5,8 @@ pub enum RunState
     Paused,
     Running,
     Recording,
-    PausedRecording
+    PausedRecording,
+    SavePendingRecording
 }
 
 pub enum ClickRuleInitData

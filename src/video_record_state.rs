@@ -328,9 +328,15 @@ impl VideoRecordState
         self.video_frame_producer.clone()
     }
 
+    pub fn recording(&self) -> bool
+    {
+        let frame_counter = self.frame_counter.borrow();
+        frame_counter.sent_frame_count > 0 && frame_counter.sent_frame_count < frame_counter.final_frame
+    }
+
     pub fn pending(&self) -> bool
     {
-        self.frame_counter.borrow().sent_frame_count > 0
+        self.frame_counter.borrow().recorded_frame_count > 0
     }
 
     pub fn restart(&mut self) -> Result<(), String>
