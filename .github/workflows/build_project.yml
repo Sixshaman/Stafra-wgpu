@@ -2,8 +2,8 @@ name: Rust
 
 on:
   push:
-    tags:
-      Version-*
+    branches: 
+      main
 
 env:
   CARGO_TERM_COLOR: always
