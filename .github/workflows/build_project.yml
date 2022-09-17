@@ -16,9 +16,11 @@ jobs:
 
     steps:
     - uses: actions/checkout@v2
-    - name: Erase tags
+    - name: Get latest tag
       run:
-        git fetch --tags --force
+        git fetch --tags --force |
+        latest_tag=$(git describe --abbrev=0 --tags || true) |
+        echo "::set-output name=tag::${latest_tag}" 
     - name: Install wasm-bindgen-cli
       uses: jetli/wasm-bindgen-action@v0.1.0
       with:
@@ -51,11 +53,6 @@ jobs:
     - name: Run tests
       run: 
         RUSTFLAGS=--cfg=web_sys_unstable_apis CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUNNER=wasm-bindgen-test-runner cargo test --verbose --target wasm32-unknown-unknown
-    - uses: actions-ecosystem/action-get-latest-tag@v1
-      id: get-latest-tag
-      with:
-        with_initial_version: true
-        initial_version: Version-1.0
     - name: Zip release
       uses: montudor/action-zip@v1
       with:
