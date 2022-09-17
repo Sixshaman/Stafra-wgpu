@@ -22,6 +22,8 @@ jobs:
         git fetch --tags --force |
         latest_tag=$(git describe --abbrev=0 --tags || true) |
         echo "::set-output name=tag::${latest_tag}" 
+    - name: Test
+      run: echo ${{steps.get_latest_tag.outputs.tag}}
     - name: Install wasm-bindgen-cli
       uses: jetli/wasm-bindgen-action@v0.1.0
       with:
