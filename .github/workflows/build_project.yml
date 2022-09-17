@@ -17,6 +17,7 @@ jobs:
     steps:
     - uses: actions/checkout@v2
     - name: Get latest tag
+      id: get_latest_tag
       run:
         git fetch --tags --force |
         latest_tag=$(git describe --abbrev=0 --tags || true) |
@@ -63,3 +64,4 @@ jobs:
       with:
         artifacts: "stafra_wgpu.zip"
         token: ${{secrets.GITHUB_TOKEN}}
+        tag: ${{steps.get_latest_tag.outputs.tag}}
