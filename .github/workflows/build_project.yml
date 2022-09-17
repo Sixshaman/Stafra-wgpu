@@ -2,8 +2,6 @@ name: Rust
 
 on:
   push:
-    branches: 
-      main
     tags:
       Version-*
 
@@ -21,8 +19,6 @@ jobs:
     - name: Get latest tag
       id: get_latest_tag
       run: echo "::set-output name=latest_tag::$(git describe --abbrev=0 --tags || true)"        
-    - name: Test
-      run: echo ${{steps.get_latest_tag.outputs.tag}}
     - name: Install wasm-bindgen-cli
       uses: jetli/wasm-bindgen-action@v0.1.0
       with:
