@@ -16,12 +16,11 @@ jobs:
 
     steps:
     - uses: actions/checkout@v2
+    - name: Fetch tags
+      run: git fetch --tags --force
     - name: Get latest tag
       id: get_latest_tag
-      run:
-        git fetch --tags --force |
-        latest_tag=$(git describe --abbrev=0 --tags || true) |
-        echo "::set-output name=tag::${latest_tag}" 
+      run: echo "::set-output name=latest_tag::$(git describe --abbrev=0 --tags || true)"        
     - name: Test
       run: echo ${{steps.get_latest_tag.outputs.tag}}
     - name: Install wasm-bindgen-cli
@@ -66,4 +65,4 @@ jobs:
       with:
         artifacts: "stafra_wgpu.zip"
         token: ${{secrets.GITHUB_TOKEN}}
-        tag: ${{steps.get_latest_tag.outputs.tag}}
+        tag: ${{steps.get_latest_tag.outputs.latest_tag}}
