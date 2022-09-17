@@ -16,6 +16,9 @@ jobs:
 
     steps:
     - uses: actions/checkout@v2
+    - name: Erase tags
+      run:
+        git fetch --tags --force
     - name: Install wasm-bindgen-cli
       uses: jetli/wasm-bindgen-action@v0.1.0
       with:
